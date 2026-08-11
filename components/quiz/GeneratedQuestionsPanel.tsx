@@ -2,27 +2,39 @@
 
 import { useState } from "react";
 import * as db from "@/lib/db";
-import { generateQuestionsFromText, type GeneratedQuestion } from "@/lib/questionGenerator";
+import {
+  extractQuestionsFromAnnaleText,
+  generateQuestionsFromText,
+  type GeneratedQuestion,
+} from "@/lib/questionGenerator";
 import { useAiStatus } from "@/lib/useAiStatus";
 
 interface GeneratedQuestionsPanelProps {
   moduleId: string;
+  mode: "generate" | "extract";
   getSourceText: () => Promise<string>;
   onClose: () => void;
 }
 
 type Phase = "form" | "loading" | "review" | "saved";
 
+interface ReviewItem {
+  prompt: string;
+  choices: string[];
+  correctIndexes: number[];
+  included: boolean;
+}
+
 export default function GeneratedQuestionsPanel({
   moduleId,
+  mode,
   getSourceText,
   onClose,
 }: GeneratedQuestionsPanelProps) {
   const aiStatus = useAiStatus();
   const [phase, setPhase] = useState<Phase>("form");
   const [count, setCount] = useState(5);
-  const [proposals, setProposals] = useState<GeneratedQuestion[]>([]);
-  const [selected, setSelected] = useState<boolean[]>([]);
+  const [items, setItems] = useState<ReviewItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState(0);
 
@@ -31,9 +43,19 @@ export default function GeneratedQuestionsPanel({
     setError(null);
     try {
       const sourceText = await getSourceText();
-      const generated = await generateQuestionsFromText(sourceText, count);
-      setProposals(generated);
-      setSelected(generated.map(() => true));
+      const generated: GeneratedQuestion[] =
+        mode === "extract"
+          ? await extractQuestionsFromAnnaleText(sourceText)
+          : await generateQuestionsFromText(sourceText, count);
+
+      setItems(
+        generated.map((q) => ({
+          prompt: q.prompt,
+          choices: q.choices,
+          correctIndexes: q.correctIndexes,
+          included: q.correctIndexes.length > 0,
+        }))
+      );
       setPhase("review");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de la génération.");
@@ -41,13 +63,43 @@ export default function GeneratedQuestionsPanel({
     }
   }
 
+  function toggleIncluded(index: number) {
+    setItems((prev) =>
+      prev.map((it, i) => (i === index ? { ...it, included: !it.included } : it))
+    );
+  }
+
+  function toggleCorrect(itemIndex: number, choiceIndex: number) {
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== itemIndex) return it;
+        const has = it.correctIndexes.includes(choiceIndex);
+        const correctIndexes = has
+          ? it.correctIndexes.filter((c) => c !== choiceIndex)
+          : [...it.correctIndexes, choiceIndex].sort((a, b) => a - b);
+
+        let included = it.included;
+        if (correctIndexes.length === 0) {
+          // Plus aucune bonne réponse : ne peut plus être incluse.
+          included = false;
+        } else if (it.correctIndexes.length === 0) {
+          // Première bonne réponse renseignée pour une question qui n'en
+          // avait pas : l'inclure par défaut.
+          included = true;
+        }
+
+        return { ...it, correctIndexes, included };
+      })
+    );
+  }
+
   async function handleSave() {
-    const toSave = proposals.filter((_, i) => selected[i]);
+    const toSave = items.filter((it) => it.included && it.correctIndexes.length > 0);
     if (toSave.length === 0) return;
     setPhase("loading");
     try {
-      for (const q of toSave) {
-        await db.addQuestion(moduleId, q.prompt, q.choices, q.correctIndexes);
+      for (const it of toSave) {
+        await db.addQuestion(moduleId, it.prompt, it.choices, it.correctIndexes);
       }
       setSavedCount(toSave.length);
       setPhase("saved");
@@ -61,8 +113,8 @@ export default function GeneratedQuestionsPanel({
     return (
       <div className="ai-generate-panel">
         <div className="empty-hint" style={{ padding: 0 }}>
-          Génération IA non disponible : configure une clé Groq dans{" "}
-          <strong>Paramètres</strong> pour activer cette fonctionnalité.
+          {mode === "extract" ? "Extraction" : "Génération"} IA non disponible : configure une clé
+          OpenRouter dans <strong>Paramètres</strong> pour activer cette fonctionnalité.
         </div>
         <button type="button" className="inline-btn" onClick={onClose} style={{ marginTop: 10 }}>
           Fermer
@@ -86,43 +138,54 @@ export default function GeneratedQuestionsPanel({
   }
 
   if (phase === "review") {
+    const includableCount = items.filter((it) => it.included && it.correctIndexes.length > 0).length;
     return (
       <div className="ai-generate-panel">
         <div className="empty-hint" style={{ padding: "0 0 10px" }}>
-          Relis chaque question avant d&apos;enregistrer — une IA peut se tromper, surtout sur du contenu
-          médical. Décoche celles à écarter.
+          {mode === "extract"
+            ? "Relis chaque question. Quand aucun corrigé n'a été trouvé dans le texte, coche toi-même la bonne réponse avant d'inclure la question."
+            : "Relis chaque question avant d'enregistrer — une IA peut se tromper, surtout sur du contenu médical."}
         </div>
         <div className="ai-proposal-list">
-          {proposals.map((q, i) => (
-            <label className="ai-proposal" key={i}>
-              <input
-                type="checkbox"
-                checked={selected[i]}
-                onChange={() =>
-                  setSelected((prev) => prev.map((v, idx) => (idx === i ? !v : v)))
-                }
-              />
-              <div>
-                <div className="ai-proposal-prompt">{q.prompt}</div>
-                <ul className="ai-proposal-choices">
-                  {q.choices.map((c, ci) => (
-                    <li key={ci} className={q.correctIndexes.includes(ci) ? "correct" : ""}>
-                      {c}
-                    </li>
-                  ))}
-                </ul>
+          {items.map((it, itemIndex) => {
+            const needsAnswer = it.correctIndexes.length === 0;
+            return (
+              <div className="ai-proposal" key={itemIndex} style={{ cursor: "default" }}>
+                <input
+                  type="checkbox"
+                  checked={it.included && !needsAnswer}
+                  disabled={needsAnswer}
+                  onChange={() => toggleIncluded(itemIndex)}
+                />
+                <div style={{ flex: 1 }}>
+                  <div className="ai-proposal-prompt">{it.prompt}</div>
+                  <ul className="ai-proposal-choices">
+                    {it.choices.map((c, choiceIndex) => {
+                      const isCorrect = it.correctIndexes.includes(choiceIndex);
+                      return (
+                        <li
+                          key={choiceIndex}
+                          className={`ai-choice-toggle ${isCorrect ? "correct" : ""}`}
+                          onClick={() => toggleCorrect(itemIndex, choiceIndex)}
+                        >
+                          {c}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {needsAnswer && (
+                    <div className="ai-needs-answer">
+                      ⚠️ Aucun corrigé trouvé — clique sur la bonne réponse ci-dessus.
+                    </div>
+                  )}
+                </div>
               </div>
-            </label>
-          ))}
+            );
+          })}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button
-            type="button"
-            className="inline-btn"
-            onClick={handleSave}
-            disabled={selected.every((v) => !v)}
-          >
-            Enregistrer ({selected.filter(Boolean).length})
+          <button type="button" className="inline-btn" onClick={handleSave} disabled={includableCount === 0}>
+            Enregistrer ({includableCount})
           </button>
           <button type="button" className="inline-btn" onClick={onClose}>
             Annuler
@@ -140,19 +203,27 @@ export default function GeneratedQuestionsPanel({
   return (
     <div className="ai-generate-panel">
       <div className="inline-form" style={{ flexWrap: "wrap" }}>
-        <label className="ai-count-label">
-          Nombre de questions
-          <input
-            type="number"
-            min={1}
-            max={10}
-            value={count}
-            onChange={(e) => setCount(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
-            className="ai-count-input"
-          />
-        </label>
+        {mode === "generate" && (
+          <label className="ai-count-label">
+            Nombre de questions
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={count}
+              onChange={(e) => setCount(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
+              className="ai-count-input"
+            />
+          </label>
+        )}
         <button type="button" className="inline-btn" onClick={handleGenerate} disabled={phase === "loading"}>
-          {phase === "loading" ? "Génération…" : "🤖 Générer"}
+          {phase === "loading"
+            ? mode === "extract"
+              ? "Extraction…"
+              : "Génération…"
+            : mode === "extract"
+              ? "🤖 Extraire les questions"
+              : "🤖 Générer"}
         </button>
         <button type="button" className="inline-btn" onClick={onClose} disabled={phase === "loading"}>
           Annuler

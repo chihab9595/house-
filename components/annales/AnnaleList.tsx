@@ -44,7 +44,7 @@ export default function AnnaleList({ annales, onRemove }: AnnaleListProps) {
                 className="inline-btn"
                 onClick={() => setGeneratingForId(generatingForId === a.id ? null : a.id)}
               >
-                🤖 Questions
+                🤖 Extraire questions
               </button>
               <button
                 type="button"
@@ -62,6 +62,7 @@ export default function AnnaleList({ annales, onRemove }: AnnaleListProps) {
             {generatingForId === a.id && (
               <GeneratedQuestionsPanel
                 moduleId={a.moduleId}
+                mode="extract"
                 getSourceText={async () => a.extractedText}
                 onClose={() => setGeneratingForId(null)}
               />

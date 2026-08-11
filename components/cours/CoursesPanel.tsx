@@ -93,7 +93,7 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                       className="inline-btn"
                       onClick={() => setGeneratingForId(generatingForId === c.id ? null : c.id)}
                     >
-                      🤖 Questions
+                      🤖 Générer questions
                     </button>
                   )}
                   <button
@@ -112,6 +112,7 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                 {generatingForId === c.id && (
                   <GeneratedQuestionsPanel
                     moduleId={c.moduleId}
+                    mode="generate"
                     getSourceText={() => extractCourseText(c)}
                     onClose={() => setGeneratingForId(null)}
                   />
