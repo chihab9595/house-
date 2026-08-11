@@ -14,7 +14,13 @@ export function formatImportedDate(timestamp: number): string {
 }
 
 function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  // Date locale de l'utilisateur, pas la date UTC — sinon "aujourd'hui" est
+  // faux pendant 1 à 2h après minuit heure française (UTC+1/+2).
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function daysUntil(dateIso: string): number {
@@ -39,6 +45,15 @@ export function daysLeftLabel(daysLeft: number): string {
   if (daysLeft === 0) return "Aujourd'hui";
   if (daysLeft === 1) return "1 jour restant";
   return `${daysLeft} jours restants`;
+}
+
+// Centralisé pour que /planning et le dashboard restent cohérents : un seul
+// endroit à modifier plutôt que deux logiques dupliquées qui divergent.
+export function examBadgeTone(daysLeft: number): string {
+  if (daysLeft < 0) return "";
+  if (daysLeft <= 3) return "urgent-badge";
+  if (daysLeft <= 7) return "warn-badge";
+  return "";
 }
 
 const DAY_LETTERS = ["D", "L", "M", "M", "J", "V", "S"]; // Date#getUTCDay() : 0 = dimanche

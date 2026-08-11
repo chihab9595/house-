@@ -1,7 +1,7 @@
 "use client";
 
 import { useExamCalendar } from "@/lib/useExamCalendar";
-import { daysLeftLabel, formatExamDate } from "@/lib/format";
+import { daysLeftLabel, examBadgeTone, formatExamDate } from "@/lib/format";
 
 export default function CalendarPanel() {
   const { loading, upcoming } = useExamCalendar();
@@ -27,7 +27,7 @@ export default function CalendarPanel() {
                 </div>
                 <div className="meta">{formatExamDate(e.date)}</div>
               </div>
-              <span className={`exam-badge ${e.daysLeft <= 7 ? "warn-badge" : ""}`}>
+              <span className={`exam-badge ${examBadgeTone(e.daysLeft)}`}>
                 {daysLeftLabel(e.daysLeft)}
               </span>
             </div>

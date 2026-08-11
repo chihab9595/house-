@@ -1,16 +1,9 @@
 import type { Exam } from "@/lib/examTypes";
-import { daysLeftLabel, daysUntil, formatExamDate } from "@/lib/format";
+import { daysLeftLabel, daysUntil, examBadgeTone, formatExamDate } from "@/lib/format";
 
 interface ExamListProps {
   exams: Exam[];
   onRemove: (id: string) => void;
-}
-
-function badgeTone(daysLeft: number): string {
-  if (daysLeft < 0) return "";
-  if (daysLeft <= 3) return "warn-badge";
-  if (daysLeft <= 7) return "warn-badge";
-  return "";
 }
 
 export default function ExamList({ exams, onRemove }: ExamListProps) {
@@ -29,7 +22,7 @@ export default function ExamList({ exams, onRemove }: ExamListProps) {
               <div className="name">{e.name}</div>
               <div className="meta">{formatExamDate(e.date)}</div>
             </div>
-            <span className={`exam-badge ${badgeTone(daysLeft)}`}>{daysLeftLabel(daysLeft)}</span>
+            <span className={`exam-badge ${examBadgeTone(daysLeft)}`}>{daysLeftLabel(daysLeft)}</span>
             <button
               type="button"
               className="remove"

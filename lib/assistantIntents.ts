@@ -40,7 +40,11 @@ function normalize(text: string): string {
 }
 
 function findModule(q: string, modules: AssistantModuleStat[]): AssistantModuleStat | null {
-  return modules.find((m) => q.includes(normalize(m.name))) ?? null;
+  // Préférer le nom le plus long qui matche : sinon "Cardiologie" court-circuite
+  // "Cardiologie pédiatrique" alors que la question visait ce dernier.
+  const matches = modules.filter((m) => q.includes(normalize(m.name)));
+  if (matches.length === 0) return null;
+  return matches.reduce((longest, m) => (m.name.length > longest.name.length ? m : longest));
 }
 
 export function answerQuery(query: string, ctx: AssistantContext): AssistantReply {

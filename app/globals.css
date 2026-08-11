@@ -678,6 +678,10 @@ nav a.active {
 }
 
 .exam-badge.warn-badge {
+  color: var(--warn);
+}
+
+.exam-badge.urgent-badge {
   color: var(--pulse);
 }
 

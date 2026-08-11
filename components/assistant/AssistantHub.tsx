@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useCourseStats } from "@/lib/useCourseStats";
 import { useQuizStats } from "@/lib/useQuizStats";
 import { useExamCalendar } from "@/lib/useExamCalendar";
@@ -29,6 +29,13 @@ export default function AssistantHub() {
   const speech = useSpeechRecognition();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   function handleQuery(text: string) {
     const trimmed = text.trim();
@@ -76,7 +83,12 @@ export default function AssistantHub() {
       speech.stop();
       return;
     }
-    speech.start((text) => handleQuery(text));
+    speech.start((text) => {
+      // Un résultat vocal peut arriver après que l'utilisateur a quitté la
+      // page ; ignorer plutôt que de déclencher une navigation surprise.
+      if (!mountedRef.current) return;
+      handleQuery(text);
+    });
   }
 
   return (

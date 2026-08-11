@@ -51,6 +51,7 @@ export default function ScanForm({ onSave }: ScanFormProps) {
           type="file"
           accept="image/*,application/pdf"
           onChange={handleFileChange}
+          disabled={running}
           style={{ display: "none" }}
         />
       </label>

@@ -7,7 +7,7 @@
 // convertis en images page par page (lib/pdfToImages.ts) avant l'OCR, car
 // tesseract.js ne sait lire que des images.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createWorker, type Worker } from "tesseract.js";
 import { pdfToImageBlobs } from "./pdfToImages";
 
@@ -30,6 +30,17 @@ export function useOcr() {
       });
     }
     return workerRef.current;
+  }, []);
+
+  // Le worker tesseract (instance WASM complète) est réutilisé entre les
+  // scans pour la performance, mais doit être libéré quand le composant qui
+  // l'utilise se démonte — sinon chaque montage/démontage de ScanForm en
+  // laisse un orphelin en mémoire.
+  useEffect(() => {
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
   }, []);
 
   const recognize = useCallback(

@@ -46,6 +46,15 @@ export function useSpeechRecognition() {
     setSupported(getSpeechRecognitionCtor() !== null);
   }, []);
 
+  // Stoppe une reconnaissance encore active si le composant se démonte (ex.
+  // l'utilisateur quitte /assistant avant la fin) — sinon un résultat tardif
+  // peut encore déclencher onResult (et une navigation) sur une page quittée.
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
   const start = useCallback((onResult: (text: string) => void) => {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) return;

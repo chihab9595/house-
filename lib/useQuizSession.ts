@@ -28,6 +28,7 @@ export function useQuizSession(moduleId: string | null) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [revealed, setRevealed] = useState(false);
   const startedAtRef = useRef<number | null>(null);
+  const finishingRef = useRef(false);
 
   const start = useCallback((questions: Question[]) => {
     setOrder(shuffle(questions));
@@ -36,6 +37,7 @@ export function useQuizSession(moduleId: string | null) {
     setSelected(new Set());
     setRevealed(false);
     startedAtRef.current = Date.now();
+    finishingRef.current = false;
     setPhase("running");
   }, []);
 
@@ -64,6 +66,8 @@ export function useQuizSession(moduleId: string | null) {
 
   const next = useCallback(async () => {
     if (index + 1 >= order.length) {
+      if (finishingRef.current) return;
+      finishingRef.current = true;
       const score = answers.filter((a) => a.correct).length;
       if (moduleId && answers.length > 0) {
         await db.saveAttempt({ moduleId, answers, score, total: answers.length, completedAt: Date.now() });

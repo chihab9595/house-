@@ -57,6 +57,14 @@ function openDatabase(): Promise<IDBDatabase> {
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    request.onblocked = () => {
+      // Une future montée de DB_VERSION peut rester bloquée si un autre
+      // onglet de la PWA garde une connexion ouverte sur l'ancienne version.
+      // Pas de mécanisme de blocage silencieux : au moins un signal diagnostiquable.
+      console.warn(
+        "HOUSE : mise à jour de la base locale bloquée par un autre onglet ouvert. Ferme les autres onglets de l'application et recharge la page."
+      );
+    };
   });
 }
 
@@ -341,7 +349,27 @@ export async function exportAllData(): Promise<BackupData> {
 // d'origine sont conservés, rien n'est supprimé). N'émet pas d'événements
 // d'activité — restaurer d'anciennes données ne doit pas polluer le journal
 // avec des entrées "à l'instant".
+const BACKUP_ARRAY_FIELDS = [
+  "modules",
+  "courses",
+  "questions",
+  "attempts",
+  "annales",
+  "exams",
+  "studySessions",
+  "events",
+] as const;
+
 export async function restoreBackup(backup: BackupData): Promise<void> {
+  // Valider la forme complète avant d'écrire quoi que ce soit : sinon une
+  // sauvegarde corrompue (ex. "courses" manquant) importe partiellement les
+  // premiers stores avant de planter, laissant la base dans un état incohérent.
+  for (const field of BACKUP_ARRAY_FIELDS) {
+    if (!Array.isArray(backup[field])) {
+      throw new Error(`Sauvegarde invalide : champ "${field}" manquant ou incorrect.`);
+    }
+  }
+
   await Promise.all(backup.modules.map((m) => put(MODULES_STORE, m)));
   await Promise.all(
     backup.courses.map(async ({ fileDataUrl, ...rest }) => {

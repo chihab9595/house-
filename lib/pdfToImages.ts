@@ -31,25 +31,33 @@ export async function pdfToImageBlobs(
   const pdfjsLib = await loadPdfjs();
 
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const blobs: Blob[] = [];
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    onProgress?.(pageNum, pdf.numPages);
+  try {
+    const blobs: Blob[] = [];
 
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: RENDER_SCALE });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Impossible de créer le contexte de rendu du PDF.");
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      onProgress?.(pageNum, pdf.numPages);
 
-    await page.render({ canvasContext: context, viewport, canvas }).promise;
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: RENDER_SCALE });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Impossible de créer le contexte de rendu du PDF.");
 
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (blob) blobs.push(blob);
+      await page.render({ canvasContext: context, viewport, canvas }).promise;
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (blob) blobs.push(blob);
+    }
+
+    return blobs;
+  } finally {
+    // Libère les ressources du document (mémoire + worker pdf.js) dès la
+    // conversion terminée, sans attendre un démontage de composant.
+    await loadingTask.destroy();
   }
-
-  return blobs;
 }
