@@ -285,13 +285,15 @@ export async function getStudySessions(): Promise<StudySession[]> {
 export async function addStudySession(
   moduleId: string,
   durationSeconds: number,
-  date: string
+  date: string,
+  source: StudySession["source"] = "quiz"
 ): Promise<StudySession> {
   const session: StudySession = {
     id: generateId(),
     moduleId,
     durationSeconds,
     date,
+    source,
     createdAt: Date.now(),
   };
   await put(STUDY_SESSIONS_STORE, session);

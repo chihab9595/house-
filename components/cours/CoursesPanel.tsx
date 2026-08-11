@@ -2,7 +2,10 @@
 
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type { Course, CourseModule } from "@/lib/courseTypes";
-import { fileIconFor, formatFileSize, formatImportedDate } from "@/lib/format";
+import { fileIconFor, formatFileSize, formatImportedDate, formatMmSs } from "@/lib/format";
+import { useReadingTimer } from "@/lib/useReadingTimer";
+import { extractCourseText } from "@/lib/questionGenerator";
+import GeneratedQuestionsPanel from "@/components/quiz/GeneratedQuestionsPanel";
 
 interface CoursesPanelProps {
   selectedModule: CourseModule | null;
@@ -11,10 +14,18 @@ interface CoursesPanelProps {
   onRemove: (courseId: string) => void;
 }
 
+function supportsAiGeneration(course: Course): boolean {
+  const type = course.fileType ?? "";
+  const name = course.fileName ?? "";
+  return type === "application/pdf" || type.startsWith("text/") || /\.(pdf|txt|md)$/i.test(name);
+}
+
 export default function CoursesPanel({ selectedModule, courses, onImport, onRemove }: CoursesPanelProps) {
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const readingTimer = useReadingTimer();
+  const [generatingForId, setGeneratingForId] = useState<string | null>(null);
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0] ?? null;
@@ -51,31 +62,63 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
         <div className="empty-hint">Aucun cours importé dans ce module pour l&apos;instant.</div>
       ) : (
         <div className="course-list">
-          {courses.map((c) => (
-            <div className="course-card" key={c.id}>
-              <span className="file-icon">{fileIconFor(c.fileType)}</span>
-              <div className="info">
-                <div className="name">{c.name}</div>
-                <div className="meta">
-                  {formatImportedDate(c.importedAt)}
-                  {c.fileSize !== null ? ` · ${formatFileSize(c.fileSize)}` : ""}
-                  {!c.fileName ? " · sans fichier" : ""}
+          {courses.map((c) => {
+            const isReadingThis = readingTimer.activeCourseId === c.id;
+            const anotherActive = readingTimer.activeCourseId !== null && !isReadingThis;
+            return (
+              <div key={c.id}>
+                <div className="course-card">
+                  <span className="file-icon">{fileIconFor(c.fileType)}</span>
+                  <div className="info">
+                    <div className="name">{c.name}</div>
+                    <div className="meta">
+                      {formatImportedDate(c.importedAt)}
+                      {c.fileSize !== null ? ` · ${formatFileSize(c.fileSize)}` : ""}
+                      {!c.fileName ? " · sans fichier" : ""}
+                    </div>
+                  </div>
+                  {c.fileName && (
+                    <button
+                      type="button"
+                      className="inline-btn"
+                      disabled={anotherActive}
+                      onClick={() => (isReadingThis ? readingTimer.stop() : readingTimer.start(c))}
+                    >
+                      {isReadingThis ? `⏸️ Terminer (${formatMmSs(readingTimer.elapsedSeconds)})` : "📖 Lire"}
+                    </button>
+                  )}
+                  {supportsAiGeneration(c) && (
+                    <button
+                      type="button"
+                      className="inline-btn"
+                      onClick={() => setGeneratingForId(generatingForId === c.id ? null : c.id)}
+                    >
+                      🤖 Questions
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="remove"
+                    aria-label={`Supprimer ${c.name}`}
+                    onClick={() => {
+                      if (window.confirm(`Supprimer le cours « ${c.name} » ?`)) {
+                        onRemove(c.id);
+                      }
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
+                {generatingForId === c.id && (
+                  <GeneratedQuestionsPanel
+                    moduleId={c.moduleId}
+                    getSourceText={() => extractCourseText(c)}
+                    onClose={() => setGeneratingForId(null)}
+                  />
+                )}
               </div>
-              <button
-                type="button"
-                className="remove"
-                aria-label={`Supprimer ${c.name}`}
-                onClick={() => {
-                  if (window.confirm(`Supprimer le cours « ${c.name} » ?`)) {
-                    onRemove(c.id);
-                  }
-                }}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

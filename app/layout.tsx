@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono, Rajdhani } from "next/font/google";
 import Header from "@/components/layout/Header";
 import FooterBar from "@/components/layout/FooterBar";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
+import AutoBackupManager from "@/components/pwa/AutoBackupManager";
 import "./globals.css";
 
 const inter = Inter({
@@ -56,6 +57,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <FooterBar />
         </div>
         <ServiceWorkerRegister />
+        <AutoBackupManager />
       </body>
     </html>
   );

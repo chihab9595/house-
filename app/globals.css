@@ -753,6 +753,92 @@ nav a.active {
   font-weight: 400;
 }
 
+/* GÉNÉRATION DE QUESTIONS PAR IA */
+.ai-generate-panel {
+  padding: 12px;
+  margin: 6px 0 4px;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  background: rgba(139, 123, 255, 0.04);
+}
+
+.ai-count-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-mute);
+}
+
+.ai-count-input {
+  width: 56px;
+  background: #0a1526;
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.ai-proposal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.ai-proposal {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.015);
+  cursor: pointer;
+}
+
+.ai-proposal input[type="checkbox"] {
+  accent-color: var(--violet);
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.ai-proposal-prompt {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.ai-proposal-choices {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ai-proposal-choices li {
+  font-size: 12px;
+  color: var(--text-mute);
+  padding-left: 14px;
+  position: relative;
+}
+
+.ai-proposal-choices li::before {
+  content: "○";
+  position: absolute;
+  left: 0;
+}
+
+.ai-proposal-choices li.correct {
+  color: var(--good);
+}
+
+.ai-proposal-choices li.correct::before {
+  content: "●";
+}
+
 /* ASSISTANT */
 .chat-log {
   display: flex;
@@ -840,6 +926,29 @@ nav a.active {
   font-size: 11px;
   color: var(--text-mute);
   margin-top: 10px;
+}
+
+.ai-status-dot {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-line);
+  color: var(--text-mute);
+  vertical-align: middle;
+}
+
+.ai-status-dot.on {
+  color: var(--good);
+  border-color: var(--good);
+}
+
+.chat-message.thinking {
+  color: var(--text-mute);
+  font-style: italic;
 }
 
 /* SIDEBAR GAUCHE */

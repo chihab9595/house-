@@ -15,7 +15,9 @@ const RENDER_SCALE = 2;
 
 let workerConfigured = false;
 
-async function loadPdfjs() {
+// Exporté pour être réutilisé par lib/questionGenerator.ts (extraction de
+// texte natif des PDF de cours) sans dupliquer la configuration du worker.
+export async function loadPdfjs() {
   const pdfjsLib = await import("pdfjs-dist");
   if (!workerConfigured) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;

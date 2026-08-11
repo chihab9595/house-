@@ -6,8 +6,10 @@ import { useCourseStats } from "@/lib/useCourseStats";
 import { useQuizStats } from "@/lib/useQuizStats";
 import { useExamCalendar } from "@/lib/useExamCalendar";
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
+import { useAiStatus } from "@/lib/useAiStatus";
 import { speak } from "@/lib/speechSynthesis";
-import { answerQuery, type AssistantContext } from "@/lib/assistantIntents";
+import { askAi } from "@/lib/aiClient";
+import { answerQuery, buildSystemPrompt, type AssistantContext } from "@/lib/assistantIntents";
 
 interface Message {
   id: string;
@@ -27,8 +29,10 @@ export default function AssistantHub() {
   const quizStats = useQuizStats();
   const examCalendar = useExamCalendar();
   const speech = useSpeechRecognition();
+  const aiStatus = useAiStatus();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const [thinking, setThinking] = useState(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -37,7 +41,7 @@ export default function AssistantHub() {
     };
   }, []);
 
-  function handleQuery(text: string) {
+  async function handleQuery(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
 
@@ -57,25 +61,47 @@ export default function AssistantHub() {
       perModuleAccuracy: quizStats.perModule,
     };
 
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: trimmed }]);
+
     const reply = answerQuery(trimmed, ctx);
 
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "user", text: trimmed },
-      { id: crypto.randomUUID(), role: "house", text: reply.text },
-    ]);
-    speak(reply.text);
+    // Question reconnue par mots-clés : réponse instantanée, pas d'appel réseau.
+    if (reply.matched || !aiStatus.configured) {
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "house", text: reply.text }]);
+      speak(reply.text);
+      if (reply.navigateTo) {
+        const target = reply.navigateTo;
+        setTimeout(() => {
+          if (mountedRef.current) router.push(target);
+        }, 900);
+      }
+      return;
+    }
 
-    if (reply.navigateTo) {
-      const target = reply.navigateTo;
-      setTimeout(() => router.push(target), 900);
+    // Question libre + IA configurée : relais vers Groq avec le contexte réel.
+    setThinking(true);
+    try {
+      const aiText = await askAi([
+        { role: "system", content: buildSystemPrompt(ctx) },
+        { role: "user", content: trimmed },
+      ]);
+      if (!mountedRef.current) return;
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "house", text: aiText }]);
+      speak(aiText);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      const message = err instanceof Error ? err.message : "Échec de l'appel à l'IA.";
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "house", text: `⚠️ ${message}` }]);
+    } finally {
+      if (mountedRef.current) setThinking(false);
     }
   }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    handleQuery(input);
+    const value = input;
     setInput("");
+    void handleQuery(value);
   }
 
   function handleMic() {
@@ -87,13 +113,20 @@ export default function AssistantHub() {
       // Un résultat vocal peut arriver après que l'utilisateur a quitté la
       // page ; ignorer plutôt que de déclencher une navigation surprise.
       if (!mountedRef.current) return;
-      handleQuery(text);
+      void handleQuery(text);
     });
   }
 
   return (
     <div className="panel">
-      <div className="panel-title">Assistant House</div>
+      <div className="panel-title">
+        Assistant House{" "}
+        {!aiStatus.loading && (
+          <span className={`ai-status-dot ${aiStatus.configured ? "on" : "off"}`}>
+            {aiStatus.configured ? "IA active" : "mode basique"}
+          </span>
+        )}
+      </div>
 
       <div className="chat-log">
         {messages.map((m) => (
@@ -101,6 +134,7 @@ export default function AssistantHub() {
             {m.text}
           </div>
         ))}
+        {thinking && <div className="chat-message house thinking">House réfléchit…</div>}
       </div>
 
       <form className="chat-input-row" onSubmit={handleSubmit}>
