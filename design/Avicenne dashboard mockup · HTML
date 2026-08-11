@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>AVICENNE — Assistant d'étude intelligent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #060b14;
+    --panel: #0a1120;
+    --panel-line: #1a2740;
+    --cyan: #4de8ff;
+    --cyan-dim: #2a8fa8;
+    --pulse: #ff5d73;
+    --violet: #8b7bff;
+    --text: #dceaf5;
+    --text-mute: #5c7690;
+    --good: #34d399;
+    --warn: #fbbf24;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: radial-gradient(ellipse at 50% 0%, #0c1830 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding:20px;
+    background-image:
+      radial-gradient(ellipse at 50% 0%, #0c1830 0%, var(--bg) 55%),
+      repeating-linear-gradient(0deg, rgba(77,232,255,0.015) 0px, rgba(77,232,255,0.015) 1px, transparent 1px, transparent 3px);
+  }
+  .tech{font-family:'Rajdhani',sans-serif; letter-spacing:0.03em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  .shell{max-width:1400px; margin:0 auto; display:flex; flex-direction:column; gap:14px;}
+
+  /* HEADER */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:10px;
+    padding:14px 22px;
+  }
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand .mark{
+    width:32px; height:32px; border-radius:50%;
+    border:2px solid var(--cyan);
+    box-shadow:0 0 14px rgba(77,232,255,0.7), inset 0 0 8px rgba(77,232,255,0.5);
+    position:relative;
+  }
+  .brand .mark::after{
+    content:''; position:absolute; inset:8px; border-radius:50%; background:var(--cyan);
+    box-shadow:0 0 10px var(--cyan);
+  }
+  .brand h1{font-size:22px; font-weight:700; letter-spacing:0.08em; color:#fff;}
+  .brand h1 span{color:var(--cyan);}
+  nav{display:flex; gap:34px;}
+  nav a{color:var(--text-mute); text-decoration:none; font-size:14px; font-weight:600; letter-spacing:0.04em; padding-bottom:4px;}
+  nav a.active{color:var(--cyan); border-bottom:2px solid var(--cyan);}
+  .head-right{display:flex; align-items:center; gap:20px;}
+  .clock{text-align:right;}
+  .clock .time{font-size:16px; font-weight:600;}
+  .clock .date{font-size:11px; color:var(--text-mute);}
+  .status-pill{display:flex; align-items:center; gap:8px; font-size:12px;}
+  .status-pill .dot{width:8px; height:8px; border-radius:50%; background:var(--good); box-shadow:0 0 8px var(--good);}
+
+  /* GRID */
+  .grid{display:grid; grid-template-columns:230px 1fr 260px; gap:14px;}
+  .panel{background:var(--panel); border:1px solid var(--panel-line); border-radius:10px; padding:16px;}
+  .panel-title{font-size:11px; letter-spacing:0.12em; color:var(--text-mute); font-weight:600; margin-bottom:12px; text-transform:uppercase;}
+
+  /* SIDEBAR LEFT */
+  .modlist{display:flex; flex-direction:column; gap:2px;}
+  .modlist a{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 10px; border-radius:6px; color:var(--text-mute); text-decoration:none; font-size:13.5px; font-weight:500;
+  }
+  .modlist a.active{background:rgba(77,232,255,0.09); color:var(--cyan); box-shadow:inset 2px 0 0 var(--cyan);}
+  .modlist a:hover{color:var(--text);}
+
+  .mastery-ring{display:flex; flex-direction:column; align-items:center; margin-top:6px;}
+  .ring-wrap{position:relative; width:110px; height:110px;}
+  .ring-wrap svg{transform:rotate(-90deg);}
+  .ring-bg{fill:none; stroke:#132038; stroke-width:8;}
+  .ring-fg{fill:none; stroke:var(--cyan); stroke-width:8; stroke-linecap:round; filter:drop-shadow(0 0 6px var(--cyan));}
+  .ring-label{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .ring-label .pct{font-size:22px; font-weight:700; font-family:'Rajdhani',sans-serif;}
+  .ring-label .sub{font-size:9px; color:var(--text-mute); letter-spacing:0.08em;}
+
+  .stat-row{display:flex; justify-content:space-between; font-size:12.5px; padding:7px 0; border-bottom:1px solid var(--panel-line);}
+  .stat-row .k{color:var(--text-mute);}
+  .stat-row .v{font-family:'JetBrains Mono',monospace; color:var(--text);}
+  .stat-row .v.good{color:var(--good);}
+  .stat-row .v.warn{color:var(--warn);}
+
+  .btn-ghost{
+    margin-top:12px; width:100%; padding:9px; border-radius:6px; border:1px solid var(--panel-line);
+    background:transparent; color:var(--cyan); font-size:12px; letter-spacing:0.06em; cursor:pointer;
+  }
+
+  /* CENTER */
+  .center-panel{display:flex; flex-direction:column; align-items:center; padding:26px 18px;}
+  .hero-title{font-family:'Rajdhani',sans-serif; font-size:38px; font-weight:700; letter-spacing:0.12em; color:#fff; text-shadow:0 0 20px rgba(77,232,255,0.5);}
+  .hero-sub{font-size:12px; color:var(--text-mute); letter-spacing:0.15em; margin-top:4px; text-transform:uppercase;}
+
+  .center-mid{display:grid; grid-template-columns:230px 260px 230px; align-items:center; gap:14px; width:100%; margin-top:20px;}
+
+  .pulse-wrap{display:flex; align-items:center; justify-content:center; position:relative; height:230px;}
+  .ring{position:absolute; border-radius:50%; border:1px solid rgba(77,232,255,0.25);}
+  .r1{width:230px; height:230px; animation:spin 40s linear infinite;}
+  .r2{width:180px; height:180px; border-style:dashed; animation:spin 30s linear infinite reverse;}
+  .r3{width:130px; height:130px; animation:spin 20s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .core{
+    width:70px; height:70px; border-radius:50%;
+    background:radial-gradient(circle, #fff 0%, var(--cyan) 40%, transparent 75%);
+    box-shadow:0 0 40px 10px rgba(77,232,255,0.6);
+    animation:beat 1.15s ease-in-out infinite;
+  }
+  @keyframes beat{0%,100%{transform:scale(1);} 20%{transform:scale(1.12);} 35%{transform:scale(0.96);} 50%{transform:scale(1.05);}}
+
+  .side-card{font-size:13px;}
+  .side-card .row{display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--panel-line);}
+  .side-card .row:last-child{border-bottom:none;}
+  .side-card .row .label{color:var(--text);}
+  .side-card .row .tag{font-size:10.5px; color:var(--text-mute); font-family:'JetBrains Mono',monospace;}
+  .side-card .row .tag.live{color:var(--good);}
+
+  .ekg{width:100%; height:34px; margin-top:16px;}
+
+  .listening{font-size:11px; letter-spacing:0.2em; color:var(--cyan); text-transform:uppercase; margin-top:6px;}
+
+  /* BOTTOM CARDS */
+  .bottom-cards{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:8px;}
+  .bcard{background:var(--panel); border:1px solid var(--panel-line); border-radius:10px; padding:16px;}
+  .bcard .panel-title{margin-bottom:14px;}
+  .module-bar{display:flex; flex-direction:column; gap:10px;}
+  .mb-row{}
+  .mb-top{display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;}
+  .mb-top .name{color:var(--text);}
+  .mb-top .pct{font-family:'JetBrains Mono',monospace; color:var(--cyan);}
+  .mb-track{height:5px; background:#122038; border-radius:3px; overflow:hidden;}
+  .mb-fill{height:100%; background:linear-gradient(90deg, var(--cyan-dim), var(--cyan)); box-shadow:0 0 6px var(--cyan);}
+
+  .countdown{display:flex; align-items:baseline; gap:8px; margin-top:4px;}
+  .countdown .num{font-family:'Rajdhani',sans-serif; font-size:42px; font-weight:700; color:var(--pulse); text-shadow:0 0 16px rgba(255,93,115,0.5);}
+  .countdown .unit{font-size:12px; color:var(--text-mute);}
+  .bcard .exam-name{font-size:13px; color:var(--text); margin-top:8px;}
+  .bcard .exam-date{font-size:11px; color:var(--text-mute); margin-top:2px;}
+
+  .hours-graph{display:flex; align-items:flex-end; gap:5px; height:60px; margin-top:6px;}
+  .hbar{flex:1; background:linear-gradient(180deg, var(--violet), #3a2f80); border-radius:2px 2px 0 0;}
+  .hlabels{display:flex; gap:5px; margin-top:4px;}
+  .hlabels span{flex:1; text-align:center; font-size:9px; color:var(--text-mute);}
+  .hours-total{font-size:12px; color:var(--text-mute); margin-top:10px;}
+  .hours-total b{color:var(--text); font-family:'JetBrains Mono',monospace;}
+
+  .accuracy-shield{display:flex; flex-direction:column; align-items:center; margin-top:2px;}
+  .shield-icon{width:52px; height:52px; margin-bottom:10px;}
+  .accuracy-shield .big{font-size:26px; font-weight:700; font-family:'Rajdhani',sans-serif; color:var(--good);}
+  .accuracy-shield .lbl{font-size:11px; color:var(--text-mute); margin-top:2px; text-align:center;}
+  .accuracy-shield .breakdown{display:flex; gap:16px; margin-top:12px; font-size:11px;}
+  .accuracy-shield .breakdown div{text-align:center;}
+  .accuracy-shield .breakdown .n{font-family:'JetBrains Mono',monospace; font-size:14px;}
+
+  /* RIGHT SIDEBAR */
+  .notif{display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--panel-line);}
+  .notif:last-child{border-bottom:none;}
+  .notif .dot{width:7px; height:7px; border-radius:50%; background:var(--cyan); margin-top:5px; flex-shrink:0; box-shadow:0 0 6px var(--cyan);}
+  .notif .time{font-size:10px; color:var(--text-mute); font-family:'JetBrains Mono',monospace;}
+  .notif .title{font-size:12.5px; color:var(--text); margin-top:1px;}
+  .notif .desc{font-size:11px; color:var(--text-mute); margin-top:1px;}
+
+  .weather-widget{display:flex; align-items:center; justify-content:space-between; margin-top:4px;}
+  .weather-widget .temp{font-size:30px; font-weight:700; font-family:'Rajdhani',sans-serif;}
+  .weather-widget .loc{font-size:11px; color:var(--text-mute);}
+  .week{display:flex; justify-content:space-between; margin-top:14px;}
+  .week div{text-align:center; font-size:10px; color:var(--text-mute);}
+  .week div .d{color:var(--text); margin-top:4px; font-family:'JetBrains Mono',monospace;}
+
+  /* FOOTER BAR */
+  .footer-bar{display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--panel-line); border-radius:10px; padding:12px 16px;}
+  .avatar{width:36px; height:36px; border-radius:8px; background:radial-gradient(circle, var(--cyan), #0a2a38); flex-shrink:0; box-shadow:0 0 10px rgba(77,232,255,0.4);}
+  .footer-id{font-size:11px; line-height:1.3;}
+  .footer-id .v{color:var(--text);}
+  .footer-id .c{color:var(--text-mute); font-size:10px;}
+  .search-bar{
+    flex:1; display:flex; align-items:center; gap:10px; background:#0a1526; border:1px solid var(--panel-line);
+    border-radius:8px; padding:10px 16px; color:var(--text-mute); font-size:13px;
+  }
+  .footer-icons{display:flex; gap:8px;}
+  .ficon{width:38px; height:38px; border-radius:8px; border:1px solid var(--panel-line); display:flex; align-items:center; justify-content:center; color:var(--text-mute); font-size:14px;}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- HEADER -->
+  <header>
+    <div class="brand">
+      <div class="mark"></div>
+      <h1 class="tech">AVI<span>CENNE</span></h1>
+    </div>
+    <nav>
+      <a href="#" class="active">ACCUEIL</a>
+      <a href="#">MES COURS</a>
+      <a href="#">ANNALES</a>
+      <a href="#">PROGRESSION</a>
+      <a href="#">PLANNING</a>
+    </nav>
+    <div class="head-right">
+      <div class="clock">
+        <div class="time mono">15:42:31</div>
+        <div class="date">LUN 10 AOÛT 2026</div>
+      </div>
+      <div class="status-pill"><span class="dot"></span> AVICENNE · en ligne</div>
+    </div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <div class="grid">
+
+    <!-- LEFT SIDEBAR -->
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div class="panel">
+        <div class="panel-title">Modules</div>
+        <div class="modlist">
+          <a href="#" class="active">Tableau de bord</a>
+          <a href="#">Assistant IA</a>
+          <a href="#">Mes cours</a>
+          <a href="#">Annales scannées</a>
+          <a href="#">Sessions de révision</a>
+          <a href="#">Planning</a>
+          <a href="#">Paramètres</a>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Maîtrise globale</div>
+        <div class="mastery-ring">
+          <div class="ring-wrap">
+            <svg width="110" height="110">
+              <circle class="ring-bg" cx="55" cy="55" r="46"/>
+              <circle class="ring-fg" cx="55" cy="55" r="46" stroke-dasharray="289" stroke-dashoffset="75"/>
+            </svg>
+            <div class="ring-label">
+              <div class="pct">74%</div>
+              <div class="sub">MAÎTRISÉ</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px;">
+          <div class="stat-row"><span class="k">Cours importés</span><span class="v">38</span></div>
+          <div class="stat-row"><span class="k">Quiz complétés</span><span class="v">212</span></div>
+          <div class="stat-row"><span class="k">Précision moyenne</span><span class="v good">81%</span></div>
+          <div class="stat-row"><span class="k">Modules à revoir</span><span class="v warn">3</span></div>
+        </div>
+        <button class="btn-ghost">SESSION DE RÉVISION RAPIDE</button>
+      </div>
+    </div>
+
+    <!-- CENTER -->
+    <div class="panel center-panel">
+      <div class="hero-title">AVICENNE</div>
+      <div class="hero-sub">Assistant d'étude en médecine</div>
+
+      <div class="center-mid">
+        <div class="panel side-card" style="align-self:stretch;">
+          <div class="panel-title">Activité récente</div>
+          <div class="row"><span class="label">Import cours Pneumo.</span><span class="tag">Terminé</span></div>
+          <div class="row"><span class="label">Scan annales Cardio.</span><span class="tag live">En cours</span></div>
+          <div class="row"><span class="label">Génération QCM</span><span class="tag live">En cours</span></div>
+          <div class="row"><span class="label">Analyse des erreurs</span><span class="tag">En attente</span></div>
+        </div>
+
+        <div class="pulse-wrap">
+          <div class="ring r1"></div>
+          <div class="ring r2"></div>
+          <div class="ring r3"></div>
+          <div class="core"></div>
+        </div>
+
+        <div class="panel side-card" style="align-self:stretch;">
+          <div class="panel-title">Commandes rapides</div>
+          <div class="row"><span class="label">Réviser la cardiologie</span><span class="tag">▸</span></div>
+          <div class="row"><span class="label">Planifier mon contrôle</span><span class="tag">▸</span></div>
+          <div class="row"><span class="label">Voir mes points faibles</span><span class="tag">▸</span></div>
+          <div class="row"><span class="label">Scanner une annale</span><span class="tag">▸</span></div>
+        </div>
+      </div>
+
+      <svg class="ekg" viewBox="0 0 600 40" preserveAspectRatio="none">
+        <polyline points="0,20 60,20 80,20 90,4 100,36 110,20 140,20 200,20 220,20 230,8 240,32 250,20 280,20 340,20 360,20 370,4 380,36 390,20 420,20 480,20 500,20 510,8 520,32 530,20 600,20"
+          fill="none" stroke="#4de8ff" stroke-width="2" opacity="0.85"/>
+      </svg>
+      <div class="listening">AVICENNE VOUS ÉCOUTE</div>
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div class="panel">
+        <div class="panel-title">Notifications</div>
+        <div class="notif">
+          <div class="dot"></div>
+          <div>
+            <div class="time">15:40</div>
+            <div class="title">Quiz Cardiologie terminé</div>
+            <div class="desc">17/20 bonnes réponses</div>
+          </div>
+        </div>
+        <div class="notif">
+          <div class="dot"></div>
+          <div>
+            <div class="time">14:12</div>
+            <div class="title">Annale numérisée</div>
+            <div class="desc">Pneumologie · 45 questions extraites</div>
+          </div>
+        </div>
+        <div class="notif">
+          <div class="dot"></div>
+          <div>
+            <div class="time">09:05</div>
+            <div class="title">Rappel de révision</div>
+            <div class="desc">Contrôle de cardio dans 10 jours</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Modules actifs</div>
+        <div class="stat-row"><span class="k">Cardiologie</span><span class="v good">78%</span></div>
+        <div class="stat-row"><span class="k">Pneumologie</span><span class="v good">85%</span></div>
+        <div class="stat-row"><span class="k">Anatomie</span><span class="v warn">52%</span></div>
+        <div class="stat-row"><span class="k">Pharmacologie</span><span class="v warn">61%</span></div>
+        <button class="btn-ghost">GÉRER LES MODULES</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Aujourd'hui</div>
+        <div class="weather-widget">
+          <div>
+            <div class="temp">21°</div>
+            <div class="loc">Annaba, DZ</div>
+          </div>
+          <div style="font-size:34px;">☁️</div>
+        </div>
+        <div class="week">
+          <div>LUN<div class="d">23°</div></div>
+          <div>MAR<div class="d">24°</div></div>
+          <div>MER<div class="d">22°</div></div>
+          <div>JEU<div class="d">22°</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM CARDS -->
+  <div class="bottom-cards">
+    <div class="bcard">
+      <div class="panel-title">Progression par module</div>
+      <div class="module-bar">
+        <div class="mb-row">
+          <div class="mb-top"><span class="name">Cardiologie</span><span class="pct">78%</span></div>
+          <div class="mb-track"><div class="mb-fill" style="width:78%;"></div></div>
+        </div>
+        <div class="mb-row">
+          <div class="mb-top"><span class="name">Anatomie</span><span class="pct">52%</span></div>
+          <div class="mb-track"><div class="mb-fill" style="width:52%;"></div></div>
+        </div>
+        <div class="mb-row">
+          <div class="mb-top"><span class="name">Pharmacologie</span><span class="pct">61%</span></div>
+          <div class="mb-track"><div class="mb-fill" style="width:61%;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bcard">
+      <div class="panel-title">Prochain contrôle</div>
+      <div class="countdown"><span class="num mono">10</span><span class="unit">jours restants</span></div>
+      <div class="exam-name">Contrôle de Cardiologie</div>
+      <div class="exam-date">20 août 2026 · basé sur 3 modules</div>
+    </div>
+
+    <div class="bcard">
+      <div class="panel-title">Temps d'étude (7 jours)</div>
+      <div class="hours-graph">
+        <div class="hbar" style="height:30%;"></div>
+        <div class="hbar" style="height:55%;"></div>
+        <div class="hbar" style="height:40%;"></div>
+        <div class="hbar" style="height:70%;"></div>
+        <div class="hbar" style="height:90%;"></div>
+        <div class="hbar" style="height:45%;"></div>
+        <div class="hbar" style="height:60%;"></div>
+      </div>
+      <div class="hlabels"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+      <div class="hours-total">Total semaine : <b>18h20</b></div>
+    </div>
+
+    <div class="bcard">
+      <div class="panel-title">Précision aux quiz</div>
+      <div class="accuracy-shield">
+        <svg class="shield-icon" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L4 5v6c0 5.2 3.4 9.6 8 11 4.6-1.4 8-5.8 8-11V5l-8-3z" stroke="#34d399" stroke-width="1.6" fill="rgba(52,211,153,0.08)"/>
+          <path d="M8.5 12.2l2.3 2.3 4.7-5" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="big">81%</div>
+        <div class="lbl">de réponses correctes</div>
+        <div class="breakdown">
+          <div><div class="n" style="color:#34d399;">172</div>Justes</div>
+          <div><div class="n" style="color:#ff5d73;">40</div>Fausses</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER SEARCH BAR -->
+  <div class="footer-bar">
+    <div class="avatar"></div>
+    <div class="footer-id">
+      <div class="v">AVICENNE 4.0</div>
+      <div class="c">Assistant d'étude médicale</div>
+    </div>
+    <div class="search-bar">🔍&nbsp; Posez une question ou donnez un ordre…</div>
+    <div class="footer-icons">
+      <div class="ficon">🎙️</div>
+      <div class="ficon">📁</div>
+      <div class="ficon">📅</div>
+      <div class="ficon">⚙️</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
