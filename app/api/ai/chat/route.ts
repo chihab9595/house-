@@ -1,18 +1,25 @@
 import { NextResponse } from "next/server";
 import type { AiChatRequestBody } from "@/lib/aiTypes";
 
-// Proxy serveur vers l'API Groq (compatible OpenAI). La clé API reste
+// Proxy serveur vers l'API OpenRouter (compatible OpenAI). La clé API reste
 // côté serveur (process.env), jamais envoyée au navigateur — évite aussi
 // les problèmes de CORS d'un appel direct depuis le client.
 
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_MODEL = "openai/gpt-oss-20b:free";
+// Le modèle par défaut est un modèle "reasoning" : une bonne partie du budget
+// de tokens part dans son raisonnement interne avant la réponse finale, d'où
+// une limite par défaut plus généreuse que pour un modèle non-reasoning.
+const DEFAULT_MAX_TOKENS = 1536;
 
 export async function POST(request: Request) {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Aucune clé Groq configurée. Ajoute GROQ_API_KEY dans .env.local puis redémarre le serveur." },
+      {
+        error:
+          "Aucune clé OpenRouter configurée. Ajoute OPENROUTER_API_KEY dans .env.local puis redémarre le serveur.",
+      },
       { status: 503 }
     );
   }
@@ -29,33 +36,39 @@ export async function POST(request: Request) {
   }
 
   try {
-    const groqResponse = await fetch(GROQ_URL, {
+    const response = await fetch(OPENROUTER_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        // Recommandé par OpenRouter (identifie l'app dans leurs stats), sans impact fonctionnel.
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "HOUSE",
       },
       body: JSON.stringify({
-        model: process.env.GROQ_MODEL || DEFAULT_MODEL,
+        model: process.env.OPENROUTER_MODEL || DEFAULT_MODEL,
         messages: body.messages,
         temperature: body.temperature ?? 0.4,
-        max_tokens: body.maxTokens ?? 1024,
+        max_tokens: body.maxTokens ?? DEFAULT_MAX_TOKENS,
         ...(body.jsonMode ? { response_format: { type: "json_object" } } : {}),
       }),
     });
 
-    if (!groqResponse.ok) {
-      const detail = await groqResponse.text();
+    if (!response.ok) {
+      const detail = await response.text();
       return NextResponse.json(
-        { error: `Erreur Groq (${groqResponse.status}) : ${detail.slice(0, 300)}` },
+        { error: `Erreur OpenRouter (${response.status}) : ${detail.slice(0, 300)}` },
         { status: 502 }
       );
     }
 
-    const data = await groqResponse.json();
+    const data = await response.json();
     const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
-      return NextResponse.json({ error: "Réponse Groq inattendue." }, { status: 502 });
+    if (typeof content !== "string" || content.length === 0) {
+      return NextResponse.json(
+        { error: "L'IA n'a pas produit de réponse (le modèle a peut-être épuisé son budget de tokens sur son raisonnement interne — réessaie)." },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json({ content });

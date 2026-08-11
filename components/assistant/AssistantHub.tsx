@@ -36,6 +36,11 @@ export default function AssistantHub() {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    // En dev, React (Strict Mode) monte/démonte/remonte chaque composant une
+    // fois au premier rendu pour détecter les effets sans nettoyage — sans
+    // remettre `mountedRef` à true ici, il resterait bloqué à false après ce
+    // cycle simulé alors que le composant est bel et bien monté et interactif.
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };

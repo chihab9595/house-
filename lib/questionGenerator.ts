@@ -116,7 +116,10 @@ export async function generateQuestionsFromText(
       },
       { role: "user", content: prompt },
     ],
-    { jsonMode: true, temperature: 0.3, maxTokens: 2048 }
+    // maxTokens généreux : le modèle par défaut est un modèle "reasoning" qui
+    // consomme une bonne partie du budget en raisonnement interne avant de
+    // produire le JSON final, surtout pour un nombre de questions élevé.
+    { jsonMode: true, temperature: 0.3, maxTokens: 6000 }
   );
 
   let parsed: unknown;
