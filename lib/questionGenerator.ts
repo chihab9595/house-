@@ -76,16 +76,27 @@ async function extractPdfText(file: Blob): Promise<string> {
   }
 }
 
+// Les QCM médicaux français ont le plus souvent 4 ou 5 propositions (parfois
+// plus) — on ne force jamais un nombre fixe, sous peine de supprimer une
+// vraie proposition (et de désynchroniser l'index de la bonne réponse).
+const MIN_CHOICES = 2;
+const MAX_CHOICES = 6;
+
 function isValidQuestionShape(value: unknown): value is GeneratedQuestion {
   if (typeof value !== "object" || value === null) return false;
   const q = value as Record<string, unknown>;
   if (typeof q.prompt !== "string" || q.prompt.trim().length === 0) return false;
-  if (!Array.isArray(q.choices) || q.choices.length !== 4) return false;
+  if (!Array.isArray(q.choices) || q.choices.length < MIN_CHOICES || q.choices.length > MAX_CHOICES) {
+    return false;
+  }
   if (!q.choices.every((c) => typeof c === "string" && c.trim().length > 0)) return false;
   // correctIndexes peut être vide (cas "extraction" sans corrigé trouvé) —
   // seule contrainte : si présent, chaque index doit être valide et unique.
   if (!Array.isArray(q.correctIndexes)) return false;
-  if (!q.correctIndexes.every((i) => Number.isInteger(i) && (i as number) >= 0 && (i as number) < 4)) {
+  const choiceCount = q.choices.length;
+  if (
+    !q.correctIndexes.every((i) => Number.isInteger(i) && (i as number) >= 0 && (i as number) < choiceCount)
+  ) {
     return false;
   }
   if (new Set(q.correctIndexes).size !== q.correctIndexes.length) return false;
@@ -187,15 +198,17 @@ function buildExtractPrompt(text: string, isChunk: boolean): string {
       ? "Voici un extrait (une partie seulement) du texte issu de l'OCR ou de l'extraction d'une annale d'examen de médecine (il peut contenir des erreurs de reconnaissance de caractères)."
       : "Voici le texte issu de l'OCR d'une annale d'examen de médecine (il peut contenir des erreurs de reconnaissance de caractères).",
     `Identifie TOUTES les questions à choix multiples déjà présentes dans ce texte, jusqu'à ${MAX_QUESTIONS_PER_CHUNK} maximum — n'en invente aucune, transcris uniquement celles qui existent réellement.`,
-    "Pour chaque question, extrais l'énoncé et les propositions de réponse. Utilise toujours exactement 4 propositions : si le texte en donne plus, garde les 4 plus pertinentes ; s'il en donne moins ou si le format n'est pas exploitable en QCM, ignore cette question.",
-    "Si une correction ou un corrigé indiquant les bonnes réponses figure dans le texte (même à la fin, séparément des questions), utilise-le pour renseigner correctIndexes.",
+    "Pour chaque question, extrais l'énoncé et TOUTES ses propositions de réponse telles qu'elles apparaissent dans le texte (le plus souvent 4 ou 5, parfois plus) — entre 2 et 6 propositions. Ne complète jamais artificiellement à 4 : recopie le nombre réel, sans en inventer ni en supprimer aucune. Si le format n'est pas exploitable en QCM (moins de 2 propositions claires), ignore cette question.",
+    "Ignore et ne recopie jamais les codes de référence type \"(Q27 Unité-5 2025)\" ou \"(Q31 Rattrapage-5 2025)\" qui peuvent apparaître n'importe où dans le texte (avant, après ou au milieu d'une question) — ce sont des annotations, pas du contenu de la question.",
+    "Certaines questions présentent une liste d'items numérotés (1, 2, 3…) suivie de propositions de réponse qui combinent ces numéros (ex: \"A. (1,2)\", \"B. (3,5)\") — dans ce cas, garde les items numérotés comme partie de l'énoncé et les combinaisons lettrées comme les propositions de réponse.",
+    "Si une correction ou un corrigé indiquant les bonnes réponses figure dans le texte (même à la fin ou dans un tableau séparé des questions), utilise-le pour renseigner correctIndexes.",
     "Si aucune correction n'est disponible pour une question donnée, renvoie correctIndexes comme un tableau VIDE pour cette question — n'invente jamais une bonne réponse que tu ne peux pas vérifier dans le texte fourni.",
     isChunk
       ? "Si cet extrait ne contient aucune question exploitable (par exemple s'il ne contient que du corrigé sans énoncé, ou du texte hors sujet), renvoie une liste de questions vide."
       : "",
     "",
-    'Réponds uniquement avec un objet JSON strictement de cette forme (aucun texte autour) :',
-    '{"questions":[{"prompt":"...","choices":["...","...","...","..."],"correctIndexes":[0]}]}',
+    'Réponds uniquement avec un objet JSON strictement de cette forme (aucun texte autour), "choices" ayant autant d\'éléments que de propositions réelles (souvent 4 ou 5) :',
+    '{"questions":[{"prompt":"...","choices":["...","...","...","...","..."],"correctIndexes":[0]}]}',
     "",
     isChunk ? "Extrait du texte de l'annale :" : "Texte de l'annale :",
     '"""',

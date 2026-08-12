@@ -6,6 +6,7 @@ import { useModuleSelection } from "@/lib/useModuleSelection";
 import { useQuestionBank } from "@/lib/useQuestionBank";
 import YearTabs from "@/components/cours/YearTabs";
 import ModulesPanel from "@/components/cours/ModulesPanel";
+import PasteExtractPanel from "./PasteExtractPanel";
 import QuestionForm from "./QuestionForm";
 import QuestionList from "./QuestionList";
 import QuizRunner from "./QuizRunner";
@@ -120,6 +121,7 @@ export default function RevisionHub() {
                     {questionsForModule.length > 1 ? "s" : ""})
                   </button>
                 )}
+                <PasteExtractPanel moduleId={selectedModule.id} />
                 <QuestionForm onCreate={addQuestion} />
               </>
             )}

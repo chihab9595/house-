@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as db from "@/lib/db";
 import {
   extractQuestionsFromAnnaleText,
@@ -14,6 +14,10 @@ interface GeneratedQuestionsPanelProps {
   mode: "generate" | "extract";
   getSourceText: () => Promise<string>;
   onClose: () => void;
+  // Lance l'extraction automatiquement au montage, sans exiger un second clic
+  // sur le bouton du formulaire — utile quand l'action déclenchante (ex:
+  // "Créer les QCM" après un collage de texte) est déjà un choix explicite.
+  autoStart?: boolean;
 }
 
 type Phase = "form" | "loading" | "review" | "saved";
@@ -30,6 +34,7 @@ export default function GeneratedQuestionsPanel({
   mode,
   getSourceText,
   onClose,
+  autoStart = false,
 }: GeneratedQuestionsPanelProps) {
   const aiStatus = useAiStatus();
   const [phase, setPhase] = useState<Phase>("form");
@@ -38,6 +43,7 @@ export default function GeneratedQuestionsPanel({
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState(0);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const autoStarted = useRef(false);
 
   async function handleGenerate() {
     setPhase("loading");
@@ -64,6 +70,13 @@ export default function GeneratedQuestionsPanel({
       setPhase("form");
     }
   }
+
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || aiStatus.loading || !aiStatus.configured) return;
+    autoStarted.current = true;
+    handleGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, aiStatus.loading, aiStatus.configured]);
 
   function toggleIncluded(index: number) {
     setItems((prev) =>
