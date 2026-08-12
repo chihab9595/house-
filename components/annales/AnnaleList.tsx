@@ -13,7 +13,11 @@ interface AnnaleListProps {
 }
 
 export default function AnnaleList({ annales, onRemove }: AnnaleListProps) {
-  const [generatingForId, setGeneratingForId] = useState<string | null>(null);
+  const [aiPanel, setAiPanel] = useState<{ annaleId: string; mode: "extract" | "parse" } | null>(null);
+
+  function togglePanel(annaleId: string, mode: "extract" | "parse") {
+    setAiPanel((prev) => (prev?.annaleId === annaleId && prev.mode === mode ? null : { annaleId, mode }));
+  }
 
   if (annales.length === 0) {
     return <div className="empty-hint">Aucune annale scannée dans ce module pour l&apos;instant.</div>;
@@ -39,11 +43,10 @@ export default function AnnaleList({ annales, onRemove }: AnnaleListProps) {
                     : "(aucun texte extrait)"}
                 </div>
               </div>
-              <button
-                type="button"
-                className="inline-btn"
-                onClick={() => setGeneratingForId(generatingForId === a.id ? null : a.id)}
-              >
+              <button type="button" className="inline-btn" onClick={() => togglePanel(a.id, "parse")}>
+                ⚡ Analyser directement
+              </button>
+              <button type="button" className="inline-btn" onClick={() => togglePanel(a.id, "extract")}>
                 🤖 Extraire questions
               </button>
               <button
@@ -59,12 +62,12 @@ export default function AnnaleList({ annales, onRemove }: AnnaleListProps) {
                 ✕
               </button>
             </div>
-            {generatingForId === a.id && (
+            {aiPanel?.annaleId === a.id && (
               <GeneratedQuestionsPanel
                 moduleId={a.moduleId}
-                mode="extract"
+                mode={aiPanel.mode}
                 getSourceText={async () => a.extractedText}
-                onClose={() => setGeneratingForId(null)}
+                onClose={() => setAiPanel(null)}
               />
             )}
           </div>

@@ -10,120 +10,114 @@
 // modèle de document cohérent (comme un cahier de contrôle toujours mis en
 // forme pareil), mais peut manquer des questions sur un texte au format très
 // différent — dans ce cas, préférer le mode IA.
+//
+// Fonctionne au niveau du flux de caractères plutôt que ligne par ligne :
+// l'extraction PDF native (pdf.js) ne préserve aucun saut de ligne à
+// l'intérieur d'une page (tout le texte d'une page devient une seule longue
+// chaîne), alors qu'un texte collé ou océrisé en a — un découpage par ligne
+// échouerait silencieusement sur le premier cas.
 
 import type { GeneratedQuestion } from "./questionGenerator";
 
-// Accepte "N." ou "N)" ou "N-" comme numérotation de question — le style
-// varie d'un document à l'autre (certains utilisent le tiret aussi bien pour
-// les questions que pour des sous-listes internes). La distinction entre une
-// vraie nouvelle question et un sous-item numéroté ne se fait donc pas sur la
-// ponctuation mais sur la suite logique du numéro (voir plus bas).
-const TOP_LEVEL_RE = /^(\d{1,3})\s*[-.)]\s*(.+)$/;
-const CHOICE_RE = /^([A-E])\s*[-.)]\s*(.*)$/;
-const CORRIGE_RE = /^(\d{1,3})\s*[-.]\s*([A-E])\b/;
-// Ligne de bruit type "(Q27 Unité-5 2025)" ou variantes mal océrisées
-// ("1026 Unité-5 2025)", "(028 Unité-5 2025)") — courte et contenant une
-// année à 4 chiffres (20xx).
-const NOISE_LINE_RE = /^.{0,50}20\d{2}.{0,15}$/;
+// Un marqueur de question/proposition est un numéro ou une lettre suivi d'un
+// séparateur (point, tiret, parenthèse fermante) puis d'un espace — précédé
+// par un début de texte ou un espace (jamais au milieu d'un mot/nombre).
+const TOP_LEVEL_MARKER_RE = /(?:^|\s)(\d{1,3})\s*[-.)]\s*/g;
+const CHOICE_MARKER_RE = /(?:^|\s)([A-E])\s*[-.)]\s*/g;
+const CORRIGE_RE = /^(\d{1,3})\s*[-.]\s*([A-E])\s*$/;
+// Codes de référence parasites type "(Q27 Unité-5 2025)" — annotation entre
+// parenthèses contenant une année à 4 chiffres (20xx).
+const NOISE_SPAN_RE = /\([^()]{0,60}20\d{2}[^()]{0,20}\)/g;
 
-interface DraftQuestion {
-  promptLines: string[];
-  choices: string[];
+interface Marker {
+  index: number;
+  value: string;
+  contentStart: number;
 }
 
-function isNoiseLine(line: string): boolean {
-  return NOISE_LINE_RE.test(line) && !CHOICE_RE.test(line) && !TOP_LEVEL_RE.test(line);
-}
-
-function finalizeDraft(draft: DraftQuestion): { prompt: string; choices: string[] } | null {
-  const prompt = draft.promptLines.join(" ").replace(/\s+/g, " ").trim();
-  const choices = draft.choices.map((c) => c.replace(/\s+/g, " ").trim()).filter((c) => c.length > 0);
-  if (prompt.length === 0 || choices.length < 2 || choices.length > 6) return null;
-  return { prompt, choices };
-}
-
-// Sépare une ligne contenant plusieurs propositions collées sans saut de
-// ligne (ex: "C. (4,5). D. (2,5).") en plusieurs lignes, une par proposition —
-// artefact fréquent d'un copier-coller depuis un PDF à deux colonnes.
-function splitEmbeddedChoices(line: string): string[] {
-  if (CHOICE_RE.test(line)) {
-    const parts = line.split(/(?=\s[A-E][-.)]\s)/);
-    if (parts.length > 1) {
-      return [parts[0].trim(), ...parts.slice(1).map((p) => p.trim())];
-    }
+function findMarkers(text: string, re: RegExp): Marker[] {
+  const markers: Marker[] = [];
+  let m: RegExpExecArray | null;
+  re.lastIndex = 0;
+  while ((m = re.exec(text))) {
+    markers.push({ index: m.index, value: m[1], contentStart: m.index + m[0].length });
+    // Évite les boucles infinies sur un match de longueur nulle (ne devrait
+    // pas arriver avec ce pattern, mais reste défensif).
+    if (re.lastIndex === m.index) re.lastIndex++;
   }
-  return [line];
+  return markers;
 }
 
-export function parseQuestionsFromPlainText(text: string): GeneratedQuestion[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .flatMap(splitEmbeddedChoices);
+function clean(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
 
-  const drafts: DraftQuestion[] = [];
-  let current: DraftQuestion | null = null;
-  // Une ligne numérotée n'est une NOUVELLE question que si son numéro est au
-  // moins égal au prochain numéro attendu — ce qui distingue "6. Question…"
-  // (nouvelle question) de "1- Les dendrites…" juste après (sous-item interne,
-  // le numéro repart en arrière) quel que soit le style de ponctuation utilisé.
+export function parseQuestionsFromPlainText(rawText: string): GeneratedQuestion[] {
+  const text = rawText.replace(NOISE_SPAN_RE, " ");
+
+  const allTopLevel = findMarkers(text, TOP_LEVEL_MARKER_RE).map((m) => ({ ...m, num: parseInt(m.value, 10) }));
+
+  // Un marqueur numéroté n'ouvre une NOUVELLE question que si son numéro est
+  // au moins égal au prochain numéro attendu — ce qui distingue une vraie
+  // question ("6. Question…") d'un sous-item interne qui repart en arrière
+  // ("1- Les dendrites…", ou une ligne de corrigé "1-B" après la question 6).
+  const topLevel: typeof allTopLevel = [];
   let expectedNext = 1;
-
-  for (const line of lines) {
-    if (isNoiseLine(line)) continue;
-
-    const topLevelMatch = line.match(TOP_LEVEL_RE);
-    const num = topLevelMatch ? parseInt(topLevelMatch[1], 10) : null;
-    if (topLevelMatch && num !== null && (current === null || num >= expectedNext)) {
-      if (current) drafts.push(current);
-      current = { promptLines: [topLevelMatch[2]], choices: [] };
-      expectedNext = num + 1;
-      continue;
-    }
-
-    const choiceMatch = line.match(CHOICE_RE);
-    if (choiceMatch && current) {
-      current.choices.push(choiceMatch[2]);
-      continue;
-    }
-
-    if (!current) continue;
-
-    // Une ligne de corrigé isolée ("1-B") ne doit jamais polluer l'énoncé ou
-    // la dernière proposition en cours.
-    if (CORRIGE_RE.test(line) && line.length <= 8) continue;
-
-    if (current.choices.length === 0) {
-      // Encore dans l'énoncé : les items numérotés ("1- Les dendrites…")
-      // en font partie tant qu'aucune proposition lettrée n'a démarré.
-      current.promptLines.push(line);
-    } else {
-      // Suite d'une proposition sur plusieurs lignes (pas de nouvelle lettre).
-      current.choices[current.choices.length - 1] += " " + line;
+  for (const marker of allTopLevel) {
+    if (marker.num >= expectedNext) {
+      topLevel.push(marker);
+      expectedNext = marker.num + 1;
     }
   }
-  if (current) drafts.push(current);
 
-  const finalized = drafts.map(finalizeDraft).filter((q): q is { prompt: string; choices: string[] } => q !== null);
+  const drafts: { prompt: string; choices: string[] }[] = [];
+  for (let i = 0; i < topLevel.length; i++) {
+    const start = topLevel[i].contentStart;
+    const end = i + 1 < topLevel.length ? topLevel[i + 1].index : text.length;
+    const span = text.slice(start, end);
 
-  // Corrigé best-effort : cherche des lignes "N-B" / "N. C" isolées dans tout
-  // le texte (souvent un tableau ou une liste séparée des questions) et les
-  // associe à la Nième question extraite, par position.
+    const choiceMarkers = findMarkers(span, CHOICE_MARKER_RE);
+    if (choiceMarkers.length < 2) continue;
+
+    const prompt = clean(span.slice(0, choiceMarkers[0].index));
+    const choices: string[] = [];
+    for (let c = 0; c < choiceMarkers.length; c++) {
+      const cStart = choiceMarkers[c].contentStart;
+      const cEnd = c + 1 < choiceMarkers.length ? choiceMarkers[c + 1].index : span.length;
+      const choiceText = clean(span.slice(cStart, cEnd));
+      if (choiceText.length > 0) choices.push(choiceText);
+    }
+
+    if (prompt.length === 0 || choices.length < 2 || choices.length > 6) continue;
+    drafts.push({ prompt, choices });
+  }
+
+  // Corrigé best-effort : cherche des segments "N-B" / "N. C" isolés entre
+  // deux marqueurs de question (souvent un tableau ou une liste séparée) et
+  // les associe à la Nième question extraite, par position.
   const answerByNumber = new Map<number, number>();
-  for (const line of lines) {
-    const m = line.match(CORRIGE_RE);
+  for (const line of text.split(/\r?\n/)) {
+    const m = clean(line).match(CORRIGE_RE);
     if (!m) continue;
-    // Une ligne de choix ("1. …") ne doit pas être confondue avec un corrigé :
-    // le corrigé est court (numéro + lettre, rien d'autre de substantiel après).
-    const rest = line.slice(m[0].length).trim();
-    if (rest.length > 3 && !/^[).,;:\s]*$/.test(rest)) continue;
     const num = parseInt(m[1], 10);
     const letterIndex = m[2].charCodeAt(0) - "A".charCodeAt(0);
     if (!answerByNumber.has(num)) answerByNumber.set(num, letterIndex);
   }
+  // Repli supplémentaire pour un texte sans saut de ligne (PDF natif) : cherche
+  // aussi ces mêmes motifs de corrigé directement dans le flux, encadrés
+  // d'espaces plutôt que de sauts de ligne.
+  if (answerByNumber.size === 0) {
+    const inlineCorrigeRe = /(?:^|\s)(\d{1,3})\s*[-.]\s*([A-E])(?=\s|$)/g;
+    let m: RegExpExecArray | null;
+    inlineCorrigeRe.lastIndex = 0;
+    while ((m = inlineCorrigeRe.exec(text))) {
+      const num = parseInt(m[1], 10);
+      const letterIndex = m[2].charCodeAt(0) - "A".charCodeAt(0);
+      if (!answerByNumber.has(num)) answerByNumber.set(num, letterIndex);
+    }
+  }
 
-  return finalized.map((q, i) => {
+  return drafts.map((q, i) => {
     const questionNumber = i + 1;
     const answerIndex = answerByNumber.get(questionNumber);
     const correctIndexes =

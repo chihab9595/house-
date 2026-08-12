@@ -25,9 +25,11 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const readingTimer = useReadingTimer();
-  const [aiPanel, setAiPanel] = useState<{ courseId: string; mode: "generate" | "extract" } | null>(null);
+  const [aiPanel, setAiPanel] = useState<{ courseId: string; mode: "generate" | "extract" | "parse" } | null>(
+    null
+  );
 
-  function toggleAiPanel(courseId: string, mode: "generate" | "extract") {
+  function toggleAiPanel(courseId: string, mode: "generate" | "extract" | "parse") {
     setAiPanel((prev) => (prev?.courseId === courseId && prev.mode === mode ? null : { courseId, mode }));
   }
 
@@ -96,9 +98,9 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                       <button
                         type="button"
                         className="inline-btn"
-                        onClick={() => toggleAiPanel(c.id, "generate")}
+                        onClick={() => toggleAiPanel(c.id, "parse")}
                       >
-                        🤖 Générer questions
+                        ⚡ Analyser directement
                       </button>
                       <button
                         type="button"
@@ -106,6 +108,13 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                         onClick={() => toggleAiPanel(c.id, "extract")}
                       >
                         🤖 Extraire questions
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-btn"
+                        onClick={() => toggleAiPanel(c.id, "generate")}
+                      >
+                        🤖 Générer questions
                       </button>
                     </>
                   )}
