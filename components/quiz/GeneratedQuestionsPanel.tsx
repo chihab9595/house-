@@ -7,11 +7,14 @@ import {
   generateQuestionsFromText,
   type GeneratedQuestion,
 } from "@/lib/questionGenerator";
+import { parseQuestionsFromPlainText } from "@/lib/qcmParser";
 import { useAiStatus } from "@/lib/useAiStatus";
 
 interface GeneratedQuestionsPanelProps {
   moduleId: string;
-  mode: "generate" | "extract";
+  // "parse" : analyse déterministe locale, sans IA, instantanée — pour du
+  // texte bien structuré (questions numérotées, propositions lettrées).
+  mode: "generate" | "extract" | "parse";
   getSourceText: () => Promise<string>;
   onClose: () => void;
   // Lance l'extraction automatiquement au montage, sans exiger un second clic
@@ -52,9 +55,17 @@ export default function GeneratedQuestionsPanel({
     try {
       const sourceText = await getSourceText();
       const generated: GeneratedQuestion[] =
-        mode === "extract"
-          ? await extractQuestionsFromAnnaleText(sourceText, (done, total) => setProgress({ done, total }))
-          : await generateQuestionsFromText(sourceText, count);
+        mode === "parse"
+          ? parseQuestionsFromPlainText(sourceText)
+          : mode === "extract"
+            ? await extractQuestionsFromAnnaleText(sourceText, (done, total) => setProgress({ done, total }))
+            : await generateQuestionsFromText(sourceText, count);
+
+      if (mode === "parse" && generated.length === 0) {
+        throw new Error(
+          "Aucune question reconnue dans ce texte. Vérifie qu'il contient bien des questions numérotées (1. 2. 3…) avec des propositions lettrées (A. B. C…), ou essaie plutôt le mode IA pour un texte moins structuré."
+        );
+      }
 
       setItems(
         generated.map((q) => ({
@@ -72,11 +83,12 @@ export default function GeneratedQuestionsPanel({
   }
 
   useEffect(() => {
-    if (!autoStart || autoStarted.current || aiStatus.loading || !aiStatus.configured) return;
+    if (!autoStart || autoStarted.current) return;
+    if (mode !== "parse" && (aiStatus.loading || !aiStatus.configured)) return;
     autoStarted.current = true;
     handleGenerate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart, aiStatus.loading, aiStatus.configured]);
+  }, [autoStart, mode, aiStatus.loading, aiStatus.configured]);
 
   function toggleIncluded(index: number) {
     setItems((prev) =>
@@ -124,7 +136,7 @@ export default function GeneratedQuestionsPanel({
     }
   }
 
-  if (!aiStatus.loading && !aiStatus.configured) {
+  if (mode !== "parse" && !aiStatus.loading && !aiStatus.configured) {
     return (
       <div className="ai-generate-panel">
         <div className="empty-hint" style={{ padding: 0 }}>
@@ -157,9 +169,9 @@ export default function GeneratedQuestionsPanel({
     return (
       <div className="ai-generate-panel">
         <div className="empty-hint" style={{ padding: "0 0 10px" }}>
-          {mode === "extract"
-            ? "Relis chaque question. Quand aucun corrigé n'a été trouvé dans le texte, coche toi-même la bonne réponse avant d'inclure la question."
-            : "Relis chaque question avant d'enregistrer — une IA peut se tromper, surtout sur du contenu médical."}
+          {mode === "generate"
+            ? "Relis chaque question avant d'enregistrer — une IA peut se tromper, surtout sur du contenu médical."
+            : "Relis chaque question. Quand aucun corrigé n'a été trouvé dans le texte, coche toi-même la bonne réponse avant d'inclure la question."}
         </div>
         <div className="ai-proposal-list">
           {items.map((it, itemIndex) => {
@@ -233,14 +245,18 @@ export default function GeneratedQuestionsPanel({
         )}
         <button type="button" className="inline-btn" onClick={handleGenerate} disabled={phase === "loading"}>
           {phase === "loading"
-            ? mode === "extract"
-              ? progress && progress.total > 1
-                ? `Extraction… bloc ${Math.min(progress.done + 1, progress.total)}/${progress.total}`
-                : "Extraction…"
-              : "Génération…"
-            : mode === "extract"
-              ? "🤖 Extraire les questions"
-              : "🤖 Générer"}
+            ? mode === "parse"
+              ? "Analyse…"
+              : mode === "extract"
+                ? progress && progress.total > 1
+                  ? `Extraction… bloc ${Math.min(progress.done + 1, progress.total)}/${progress.total}`
+                  : "Extraction…"
+                : "Génération…"
+            : mode === "parse"
+              ? "⚡ Analyser le texte"
+              : mode === "extract"
+                ? "🤖 Extraire les questions"
+                : "🤖 Générer"}
         </button>
         <button type="button" className="inline-btn" onClick={onClose} disabled={phase === "loading"}>
           Annuler

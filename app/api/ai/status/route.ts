@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 // Permet au client de savoir si l'assistant IA est configuré, sans jamais
-// exposer la clé elle-même.
+// exposer d'identifiants. Ollama (fournisseur par défaut) ne nécessite pas
+// de clé — considéré configuré tant qu'on ne l'a pas explicitement basculé
+// vers OpenRouter, qui lui a besoin d'une clé API.
 export async function GET() {
-  return NextResponse.json({ configured: Boolean(process.env.OPENROUTER_API_KEY) });
+  const provider = process.env.AI_PROVIDER === "openrouter" ? "openrouter" : "ollama";
+  const configured = provider === "ollama" ? true : Boolean(process.env.OPENROUTER_API_KEY);
+  return NextResponse.json({ configured, provider });
 }
