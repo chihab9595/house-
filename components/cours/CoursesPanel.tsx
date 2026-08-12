@@ -25,7 +25,11 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const readingTimer = useReadingTimer();
-  const [generatingForId, setGeneratingForId] = useState<string | null>(null);
+  const [aiPanel, setAiPanel] = useState<{ courseId: string; mode: "generate" | "extract" } | null>(null);
+
+  function toggleAiPanel(courseId: string, mode: "generate" | "extract") {
+    setAiPanel((prev) => (prev?.courseId === courseId && prev.mode === mode ? null : { courseId, mode }));
+  }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0] ?? null;
@@ -88,13 +92,22 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                     </button>
                   )}
                   {supportsAiGeneration(c) && (
-                    <button
-                      type="button"
-                      className="inline-btn"
-                      onClick={() => setGeneratingForId(generatingForId === c.id ? null : c.id)}
-                    >
-                      🤖 Générer questions
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="inline-btn"
+                        onClick={() => toggleAiPanel(c.id, "generate")}
+                      >
+                        🤖 Générer questions
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-btn"
+                        onClick={() => toggleAiPanel(c.id, "extract")}
+                      >
+                        🤖 Extraire questions
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"
@@ -109,12 +122,12 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                     ✕
                   </button>
                 </div>
-                {generatingForId === c.id && (
+                {aiPanel?.courseId === c.id && (
                   <GeneratedQuestionsPanel
                     moduleId={c.moduleId}
-                    mode="generate"
+                    mode={aiPanel.mode}
                     getSourceText={() => extractCourseText(c)}
-                    onClose={() => setGeneratingForId(null)}
+                    onClose={() => setAiPanel(null)}
                   />
                 )}
               </div>
