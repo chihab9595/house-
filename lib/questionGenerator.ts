@@ -17,7 +17,8 @@ import { loadPdfjs } from "./pdfToImages";
 import type { Course } from "./courseTypes";
 
 const MAX_SOURCE_CHARS = 12_000;
-const MAX_EXTRACTED_QUESTIONS = 20;
+const CHUNK_CHARS = 12_000;
+const MAX_QUESTIONS_PER_CHUNK = 20;
 
 export interface GeneratedQuestion {
   prompt: string;
@@ -154,36 +155,95 @@ export async function generateQuestionsFromText(
   return valid;
 }
 
-export async function extractQuestionsFromAnnaleText(sourceText: string): Promise<GeneratedQuestion[]> {
+// Découpe un long texte en morceaux d'au plus `maxChars`, en coupant de
+// préférence entre deux paragraphes (double saut de ligne) plutôt qu'en plein
+// milieu d'une phrase ou d'une question.
+function splitIntoChunks(text: string, maxChars: number): string[] {
+  const paragraphs = text.split(/\n{2,}/);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const para of paragraphs) {
+    const candidate = current ? `${current}\n\n${para}` : para;
+    if (candidate.length > maxChars && current) {
+      chunks.push(current);
+      current = para;
+    } else {
+      current = candidate;
+    }
+    // Un paragraphe seul plus long que maxChars : découpage brut nécessaire.
+    while (current.length > maxChars) {
+      chunks.push(current.slice(0, maxChars));
+      current = current.slice(maxChars);
+    }
+  }
+  if (current.trim().length > 0) chunks.push(current);
+  return chunks;
+}
+
+function buildExtractPrompt(text: string, isChunk: boolean): string {
+  return [
+    isChunk
+      ? "Voici un extrait (une partie seulement) du texte issu de l'OCR ou de l'extraction d'une annale d'examen de médecine (il peut contenir des erreurs de reconnaissance de caractères)."
+      : "Voici le texte issu de l'OCR d'une annale d'examen de médecine (il peut contenir des erreurs de reconnaissance de caractères).",
+    `Identifie TOUTES les questions à choix multiples déjà présentes dans ce texte, jusqu'à ${MAX_QUESTIONS_PER_CHUNK} maximum — n'en invente aucune, transcris uniquement celles qui existent réellement.`,
+    "Pour chaque question, extrais l'énoncé et les propositions de réponse. Utilise toujours exactement 4 propositions : si le texte en donne plus, garde les 4 plus pertinentes ; s'il en donne moins ou si le format n'est pas exploitable en QCM, ignore cette question.",
+    "Si une correction ou un corrigé indiquant les bonnes réponses figure dans le texte (même à la fin, séparément des questions), utilise-le pour renseigner correctIndexes.",
+    "Si aucune correction n'est disponible pour une question donnée, renvoie correctIndexes comme un tableau VIDE pour cette question — n'invente jamais une bonne réponse que tu ne peux pas vérifier dans le texte fourni.",
+    isChunk
+      ? "Si cet extrait ne contient aucune question exploitable (par exemple s'il ne contient que du corrigé sans énoncé, ou du texte hors sujet), renvoie une liste de questions vide."
+      : "",
+    "",
+    'Réponds uniquement avec un objet JSON strictement de cette forme (aucun texte autour) :',
+    '{"questions":[{"prompt":"...","choices":["...","...","...","..."],"correctIndexes":[0]}]}',
+    "",
+    isChunk ? "Extrait du texte de l'annale :" : "Texte de l'annale :",
+    '"""',
+    text,
+    '"""',
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+export async function extractQuestionsFromAnnaleText(
+  sourceText: string,
+  onProgress?: (done: number, total: number) => void
+): Promise<GeneratedQuestion[]> {
   const trimmed = sourceText.trim();
   if (trimmed.length < 50) {
     throw new Error("Le texte extrait est trop court pour y repérer des questions.");
   }
 
-  const truncated = trimmed.length > MAX_SOURCE_CHARS;
-  const text = truncated ? trimmed.slice(0, MAX_SOURCE_CHARS) : trimmed;
+  const chunks = splitIntoChunks(trimmed, CHUNK_CHARS);
+  const isChunked = chunks.length > 1;
+  const all: GeneratedQuestion[] = [];
+  const seenPrompts = new Set<string>();
 
-  const prompt = [
-    "Voici le texte issu de l'OCR d'une annale d'examen de médecine (il peut contenir des erreurs de reconnaissance de caractères).",
-    `Identifie TOUTES les questions à choix multiples déjà présentes dans ce texte, jusqu'à ${MAX_EXTRACTED_QUESTIONS} maximum — n'en invente aucune, transcris uniquement celles qui existent réellement.`,
-    "Pour chaque question, extrais l'énoncé et les propositions de réponse. Utilise toujours exactement 4 propositions : si le texte en donne plus, garde les 4 plus pertinentes ; s'il en donne moins ou si le format n'est pas exploitable en QCM, ignore cette question.",
-    "Si une correction ou un corrigé indiquant les bonnes réponses figure dans le texte (même à la fin, séparément des questions), utilise-le pour renseigner correctIndexes.",
-    "Si aucune correction n'est disponible pour une question donnée, renvoie correctIndexes comme un tableau VIDE pour cette question — n'invente jamais une bonne réponse que tu ne peux pas vérifier dans le texte fourni.",
-    "",
-    'Réponds uniquement avec un objet JSON strictement de cette forme (aucun texte autour) :',
-    '{"questions":[{"prompt":"...","choices":["...","...","...","..."],"correctIndexes":[0]}]}',
-    "",
-    "Texte de l'annale :",
-    '"""',
-    text,
-    '"""',
-  ].join("\n");
+  for (let i = 0; i < chunks.length; i++) {
+    onProgress?.(i, chunks.length);
+    const prompt = buildExtractPrompt(chunks[i], isChunked);
+    let chunkQuestions: GeneratedQuestion[] = [];
+    try {
+      chunkQuestions = await callQuestionAi(prompt, 7000);
+    } catch {
+      // Un morceau qui échoue (JSON invalide, erreur réseau ponctuelle...) ne
+      // doit pas faire échouer toute l'extraction des autres morceaux.
+      continue;
+    }
+    for (const q of chunkQuestions) {
+      const key = q.prompt.trim().toLowerCase();
+      if (seenPrompts.has(key)) continue;
+      seenPrompts.add(key);
+      all.push(q);
+    }
+  }
+  onProgress?.(chunks.length, chunks.length);
 
-  const valid = await callQuestionAi(prompt, 7000);
-  if (valid.length === 0) {
+  if (all.length === 0) {
     throw new Error(
       "Aucune question exploitable n'a été repérée dans ce texte. Le texte OCR est peut-être trop imprécis, ou ne contient pas de QCM identifiable."
     );
   }
-  return valid;
+  return all;
 }

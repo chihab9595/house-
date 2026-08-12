@@ -37,15 +37,17 @@ export default function GeneratedQuestionsPanel({
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState(0);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   async function handleGenerate() {
     setPhase("loading");
     setError(null);
+    setProgress(null);
     try {
       const sourceText = await getSourceText();
       const generated: GeneratedQuestion[] =
         mode === "extract"
-          ? await extractQuestionsFromAnnaleText(sourceText)
+          ? await extractQuestionsFromAnnaleText(sourceText, (done, total) => setProgress({ done, total }))
           : await generateQuestionsFromText(sourceText, count);
 
       setItems(
@@ -219,7 +221,9 @@ export default function GeneratedQuestionsPanel({
         <button type="button" className="inline-btn" onClick={handleGenerate} disabled={phase === "loading"}>
           {phase === "loading"
             ? mode === "extract"
-              ? "Extraction…"
+              ? progress && progress.total > 1
+                ? `Extraction… bloc ${Math.min(progress.done + 1, progress.total)}/${progress.total}`
+                : "Extraction…"
               : "Génération…"
             : mode === "extract"
               ? "🤖 Extraire les questions"

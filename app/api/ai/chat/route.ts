@@ -11,6 +11,26 @@ const DEFAULT_MODEL = "openai/gpt-oss-20b:free";
 // de tokens part dans son raisonnement interne avant la réponse finale, d'où
 // une limite par défaut plus généreuse que pour un modèle non-reasoning.
 const DEFAULT_MAX_TOKENS = 1536;
+// Les modèles gratuits d'OpenRouter renvoient occasionnement un 429
+// "temporarily rate-limited upstream" sous forte charge (typique quand
+// l'extraction IA découpe un long document en plusieurs appels successifs).
+// C'est transitoire : on retente avec un backoff croissant plutôt que
+// d'échouer immédiatement.
+const RATE_LIMIT_RETRY_DELAYS_MS = [5000, 15000, 30000, 60000];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRateLimitRetry(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(url, init);
+    if (response.status !== 429 || attempt >= RATE_LIMIT_RETRY_DELAYS_MS.length) {
+      return response;
+    }
+    await sleep(RATE_LIMIT_RETRY_DELAYS_MS[attempt]);
+  }
+}
 
 export async function POST(request: Request) {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -36,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(OPENROUTER_URL, {
+    const response = await fetchWithRateLimitRetry(OPENROUTER_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -55,6 +75,15 @@ export async function POST(request: Request) {
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        return NextResponse.json(
+          {
+            error:
+              "Le modèle IA gratuit est temporairement surchargé (limite de débit atteinte), même après plusieurs nouvelles tentatives. Réessaie dans quelques minutes.",
+          },
+          { status: 502 }
+        );
+      }
       const detail = await response.text();
       return NextResponse.json(
         { error: `Erreur OpenRouter (${response.status}) : ${detail.slice(0, 300)}` },
