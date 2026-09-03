@@ -2,11 +2,15 @@
   "name": "house",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:prepare": "node scripts/copy-standalone-assets.mjs",
+    "desktop:start": "npm run build && npm run electron:prepare && electron .",
+    "desktop:build": "npm run build && npm run electron:prepare && electron-builder --win portable"
   },
   "dependencies": {
     "next": "16.3.0",
@@ -20,9 +24,37 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "com.house.revision",
+    "productName": "HOUSE",
+    "asar": false,
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".next",
+        "filter": [
+          "standalone/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "public/icons/icon-512.png"
+    }
   }
 }
