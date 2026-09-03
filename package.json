@@ -10,7 +10,7 @@
     "lint": "eslint",
     "electron:prepare": "node scripts/copy-standalone-assets.mjs",
     "desktop:start": "npm run build && npm run electron:prepare && electron .",
-    "desktop:build": "npm run build && npm run electron:prepare && electron-builder --win portable"
+    "desktop:build": "npm run build && npm run electron:prepare && electron-builder --win"
   },
   "dependencies": {
     "next": "16.3.0",
@@ -52,9 +52,15 @@
     ],
     "win": {
       "target": [
-        "portable"
+        "nsis"
       ],
       "icon": "public/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   }
 }
