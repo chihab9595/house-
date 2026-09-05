@@ -1,7 +1,9 @@
 // Extraction déterministe de QCM depuis du texte structuré (sans IA) — pour
 // les documents qui suivent un format cohérent : questions numérotées
 // ("1. Énoncé…"), propositions lettrées ("A. …" à "E. …" ou plus), et
-// éventuellement un corrigé séparé sous la forme "1-B", "2 - C", etc.
+// éventuellement un corrigé séparé sous la forme "1-B", "2 - C", ou le
+// format compact d'un cahier de contrôle "1ac", "2abcd" (plusieurs bonnes
+// réponses par question, sans séparateur).
 // N'invente jamais de bonne réponse : correctIndexes reste vide si aucun
 // corrigé correspondant n'est trouvé dans le texte (même règle que le mode
 // IA "extract" — l'écran de relecture gère le reste).
@@ -11,11 +13,14 @@
 // forme pareil), mais peut manquer des questions sur un texte au format très
 // différent — dans ce cas, préférer le mode IA.
 //
-// Fonctionne au niveau du flux de caractères plutôt que ligne par ligne :
-// l'extraction PDF native (pdf.js) ne préserve aucun saut de ligne à
-// l'intérieur d'une page (tout le texte d'une page devient une seule longue
-// chaîne), alors qu'un texte collé ou océrisé en a — un découpage par ligne
-// échouerait silencieusement sur le premier cas.
+// Fonctionne au niveau du flux de caractères plutôt que ligne par ligne pour
+// les questions/propositions : l'extraction PDF native (pdf.js) ne préserve
+// aucun saut de ligne à l'intérieur d'une page (tout le texte d'une page
+// devient une seule longue chaîne), alors qu'un texte collé ou océrisé en a
+// — un découpage par ligne échouerait silencieusement sur le premier cas.
+// Le corrigé, lui, est toujours cherché ligne par ligne d'abord (il n'a de
+// sens que comme ligne isolée), avec un repli sur le flux de caractères
+// quand le texte source n'a justement aucun saut de ligne exploitable.
 
 import type { GeneratedQuestion } from "./questionGenerator";
 
@@ -24,10 +29,25 @@ import type { GeneratedQuestion } from "./questionGenerator";
 // par un début de texte ou un espace (jamais au milieu d'un mot/nombre).
 const TOP_LEVEL_MARKER_RE = /(?:^|\s)(\d{1,3})\s*[-.)]\s*/g;
 const CHOICE_MARKER_RE = /(?:^|\s)([A-E])\s*[-.)]\s*/g;
-const CORRIGE_RE = /^(\d{1,3})\s*[-.]\s*([A-E])\s*$/;
+// Ligne de corrigé : un numéro suivi d'une ou plusieurs lettres A-E (majuscule
+// ou minuscule), séparateur optionnel — couvre aussi bien "1-B" / "2 . C" que
+// le format compact d'un cahier de contrôle "1ac" / "2abcd" (plusieurs bonnes
+// réponses collées, sans séparateur).
+const CORRIGE_LINE_RE = /^(\d{1,3})\s*[-.:)]?\s*([A-Ea-e]{1,5})\s*$/;
+const INLINE_CORRIGE_RE = /(?:^|\s)(\d{1,3})\s*[-.:)]?\s*([A-Ea-e]{1,5})(?=\s|$)/g;
 // Codes de référence parasites type "(Q27 Unité-5 2025)" — annotation entre
 // parenthèses contenant une année à 4 chiffres (20xx).
 const NOISE_SPAN_RE = /\([^()]{0,60}20\d{2}[^()]{0,20}\)/g;
+// Ligne ne contenant qu'une année isolée (20xx), sans parenthèses — repère
+// fréquent dans un cahier de contrôle qui regroupe des questions par année
+// d'examen, mais qui ne fait partie ni d'un énoncé ni d'un corrigé.
+const YEAR_ONLY_LINE_RE = /^\s*20\d{2}\s*$/;
+// Tolère une lettre de proposition sans ponctuation en tout début de ligne
+// ("C Permet…" au lieu de "C. Permet…") — coquille fréquente dans un texte
+// tapé ou copié à la main. Ancré au vrai début de ligne (et non "après une
+// espace" comme CHOICE_MARKER_RE) pour ne jamais confondre une lettre isolée
+// au milieu d'une phrase (ex. "groupe A") avec un marqueur de proposition.
+const BARE_CHOICE_LETTER_RE = /^([A-E])[ \t]+(?=[A-ZÀ-ÖØ-Ý])/gm;
 
 interface Marker {
   index: number;
@@ -52,15 +72,53 @@ function clean(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+// "ac" -> [0, 2], "ABCD" -> [0, 1, 2, 3]. Une seule lettre pour un corrigé
+// classique, plusieurs pour le format compact multi-réponses.
+function letterGroupToIndexes(letters: string): number[] {
+  return [...letters.toUpperCase()].map((ch) => ch.charCodeAt(0) - "A".charCodeAt(0));
+}
+
 export function parseQuestionsFromPlainText(rawText: string): GeneratedQuestion[] {
-  const text = rawText.replace(NOISE_SPAN_RE, " ");
+  // 1) Isole le corrigé ligne par ligne AVANT toute autre analyse : une ligne
+  //    reconnue comme corrigé (ou comme simple repère d'année) est retirée du
+  //    texte, sinon elle pollue le prompt ou la dernière proposition de la
+  //    question qui la précède (elle n'a alors plus de marqueur suivant pour
+  //    borner sa fin).
+  const answerByNumber = new Map<number, number[]>();
+  const keptLines: string[] = [];
+  for (const line of rawText.split(/\r?\n/)) {
+    const cleaned = clean(line);
+    const corrige = cleaned.match(CORRIGE_LINE_RE);
+    if (corrige) {
+      const num = parseInt(corrige[1], 10);
+      if (!answerByNumber.has(num)) answerByNumber.set(num, letterGroupToIndexes(corrige[2]));
+      continue;
+    }
+    if (YEAR_ONLY_LINE_RE.test(cleaned)) continue;
+    keptLines.push(line);
+  }
+
+  let text = keptLines.join("\n").replace(NOISE_SPAN_RE, " ");
+  text = text.replace(BARE_CHOICE_LETTER_RE, "$1. ");
+
+  // Repli pour un texte sans saut de ligne exploitable (extraction PDF
+  // native) : si aucune ligne de corrigé n'a été trouvée, cherche le même
+  // motif directement dans le flux de caractères.
+  if (answerByNumber.size === 0) {
+    let m: RegExpExecArray | null;
+    INLINE_CORRIGE_RE.lastIndex = 0;
+    while ((m = INLINE_CORRIGE_RE.exec(text))) {
+      const num = parseInt(m[1], 10);
+      if (!answerByNumber.has(num)) answerByNumber.set(num, letterGroupToIndexes(m[2]));
+    }
+  }
 
   const allTopLevel = findMarkers(text, TOP_LEVEL_MARKER_RE).map((m) => ({ ...m, num: parseInt(m.value, 10) }));
 
   // Un marqueur numéroté n'ouvre une NOUVELLE question que si son numéro est
   // au moins égal au prochain numéro attendu — ce qui distingue une vraie
   // question ("6. Question…") d'un sous-item interne qui repart en arrière
-  // ("1- Les dendrites…", ou une ligne de corrigé "1-B" après la question 6).
+  // ("1- Les dendrites…").
   const topLevel: typeof allTopLevel = [];
   let expectedNext = 1;
   for (const marker of allTopLevel) {
@@ -92,36 +150,10 @@ export function parseQuestionsFromPlainText(rawText: string): GeneratedQuestion[
     drafts.push({ prompt, choices });
   }
 
-  // Corrigé best-effort : cherche des segments "N-B" / "N. C" isolés entre
-  // deux marqueurs de question (souvent un tableau ou une liste séparée) et
-  // les associe à la Nième question extraite, par position.
-  const answerByNumber = new Map<number, number>();
-  for (const line of text.split(/\r?\n/)) {
-    const m = clean(line).match(CORRIGE_RE);
-    if (!m) continue;
-    const num = parseInt(m[1], 10);
-    const letterIndex = m[2].charCodeAt(0) - "A".charCodeAt(0);
-    if (!answerByNumber.has(num)) answerByNumber.set(num, letterIndex);
-  }
-  // Repli supplémentaire pour un texte sans saut de ligne (PDF natif) : cherche
-  // aussi ces mêmes motifs de corrigé directement dans le flux, encadrés
-  // d'espaces plutôt que de sauts de ligne.
-  if (answerByNumber.size === 0) {
-    const inlineCorrigeRe = /(?:^|\s)(\d{1,3})\s*[-.]\s*([A-E])(?=\s|$)/g;
-    let m: RegExpExecArray | null;
-    inlineCorrigeRe.lastIndex = 0;
-    while ((m = inlineCorrigeRe.exec(text))) {
-      const num = parseInt(m[1], 10);
-      const letterIndex = m[2].charCodeAt(0) - "A".charCodeAt(0);
-      if (!answerByNumber.has(num)) answerByNumber.set(num, letterIndex);
-    }
-  }
-
   return drafts.map((q, i) => {
     const questionNumber = i + 1;
-    const answerIndex = answerByNumber.get(questionNumber);
-    const correctIndexes =
-      answerIndex !== undefined && answerIndex >= 0 && answerIndex < q.choices.length ? [answerIndex] : [];
+    const answerIndexes = answerByNumber.get(questionNumber) ?? [];
+    const correctIndexes = answerIndexes.filter((idx) => idx >= 0 && idx < q.choices.length);
     return { prompt: q.prompt, choices: q.choices, correctIndexes };
   });
 }
