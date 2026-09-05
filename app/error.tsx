@@ -4,10 +4,10 @@ import { useEffect } from "react";
 
 export default function Error({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error(error);
@@ -23,7 +23,7 @@ export default function Error({
         Cette page a rencontré une erreur inattendue. Tes cours, annales et résultats
         enregistrés en local ne sont pas affectés.
       </p>
-      <button type="button" className="inline-btn" onClick={() => reset()}>
+      <button type="button" className="inline-btn" onClick={() => retry()}>
         Réessayer
       </button>
     </div>

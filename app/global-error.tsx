@@ -4,10 +4,10 @@
 // replaces <html>/<body> entirely, so it can't rely on layout.tsx or
 // globals.css and must be fully self-contained (inline styles only).
 export default function GlobalError({
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   return (
     <html lang="fr">
@@ -50,7 +50,7 @@ export default function GlobalError({
           </p>
           <button
             type="button"
-            onClick={() => reset()}
+            onClick={() => retry()}
             style={{
               padding: "9px 18px",
               borderRadius: 6,
