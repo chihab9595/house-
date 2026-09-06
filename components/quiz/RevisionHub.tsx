@@ -33,6 +33,10 @@ export default function RevisionHub() {
     removeQuestion,
   } = useQuestionBank(selectedModuleId);
   const [mode, setMode] = useState<Mode>("bank");
+  // undefined = tout le module (bouton "LANCER LE QUIZ" global), null = le
+  // groupe "Sans cours", une chaîne = un cours précis — distingue bien "pas
+  // de filtre" de "filtré sur le groupe sans cours".
+  const [quizCourseName, setQuizCourseName] = useState<string | null | undefined>(undefined);
 
   // Permet à l'assistant House de présélectionner un module via /revision?module=Nom
   const searchParams = useSearchParams();
@@ -94,14 +98,26 @@ export default function RevisionHub() {
             </div>
           </div>
         ) : mode === "quiz" ? (
-          <div className="panel">
-            <div className="panel-title">Quiz · {selectedModule.name}</div>
-            <QuizRunner
-              moduleId={selectedModule.id}
-              questions={questionsForModule}
-              onExit={() => setMode("bank")}
-            />
-          </div>
+          (() => {
+            const quizQuestions =
+              quizCourseName === undefined
+                ? questionsForModule
+                : questionsForModule.filter((q) => (q.courseName ?? null) === quizCourseName);
+            const quizTitle =
+              quizCourseName === undefined
+                ? selectedModule.name
+                : `${selectedModule.name} · ${quizCourseName ?? "Sans cours"}`;
+            return (
+              <div className="panel">
+                <div className="panel-title">Quiz · {quizTitle}</div>
+                <QuizRunner
+                  moduleId={selectedModule.id}
+                  questions={quizQuestions}
+                  onExit={() => setMode("bank")}
+                />
+              </div>
+            );
+          })()
         ) : (
           <div className="panel">
             <div className="panel-title">Questions · {selectedModule.name}</div>
@@ -109,13 +125,23 @@ export default function RevisionHub() {
               <div className="empty-hint">Chargement…</div>
             ) : (
               <>
-                <QuestionList questions={questionsForModule} onRemove={removeQuestion} />
+                <QuestionList
+                  questions={questionsForModule}
+                  onRemove={removeQuestion}
+                  onLaunchCourse={(courseName) => {
+                    setQuizCourseName(courseName);
+                    setMode("quiz");
+                  }}
+                />
                 {questionsForModule.length > 0 && (
                   <button
                     type="button"
                     className="btn-ghost"
                     style={{ marginBottom: 16 }}
-                    onClick={() => setMode("quiz")}
+                    onClick={() => {
+                      setQuizCourseName(undefined);
+                      setMode("quiz");
+                    }}
                   >
                     LANCER LE QUIZ ({questionsForModule.length} question
                     {questionsForModule.length > 1 ? "s" : ""})

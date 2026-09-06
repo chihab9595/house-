@@ -30,6 +30,7 @@ interface ReviewItem {
   choices: string[];
   correctIndexes: number[];
   included: boolean;
+  courseName?: string;
 }
 
 export default function GeneratedQuestionsPanel({
@@ -73,6 +74,7 @@ export default function GeneratedQuestionsPanel({
           choices: q.choices,
           correctIndexes: q.correctIndexes,
           included: q.correctIndexes.length > 0,
+          courseName: q.courseName,
         }))
       );
       setPhase("review");
@@ -126,7 +128,7 @@ export default function GeneratedQuestionsPanel({
     setPhase("loading");
     try {
       for (const it of toSave) {
-        await db.addQuestion(moduleId, it.prompt, it.choices, it.correctIndexes);
+        await db.addQuestion(moduleId, it.prompt, it.choices, it.correctIndexes, it.courseName);
       }
       setSavedCount(toSave.length);
       setPhase("saved");
@@ -176,35 +178,43 @@ export default function GeneratedQuestionsPanel({
         <div className="ai-proposal-list">
           {items.map((it, itemIndex) => {
             const needsAnswer = it.correctIndexes.length === 0;
+            const showCourseHeading = it.courseName && it.courseName !== items[itemIndex - 1]?.courseName;
             return (
-              <div className="ai-proposal" key={itemIndex} style={{ cursor: "default" }}>
-                <input
-                  type="checkbox"
-                  checked={it.included && !needsAnswer}
-                  disabled={needsAnswer}
-                  onChange={() => toggleIncluded(itemIndex)}
-                />
-                <div style={{ flex: 1 }}>
-                  <div className="ai-proposal-prompt">{it.prompt}</div>
-                  <ul className="ai-proposal-choices">
-                    {it.choices.map((c, choiceIndex) => {
-                      const isCorrect = it.correctIndexes.includes(choiceIndex);
-                      return (
-                        <li
-                          key={choiceIndex}
-                          className={`ai-choice-toggle ${isCorrect ? "correct" : ""}`}
-                          onClick={() => toggleCorrect(itemIndex, choiceIndex)}
-                        >
-                          {c}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {needsAnswer && (
-                    <div className="ai-needs-answer">
-                      ⚠️ Aucun corrigé trouvé — clique sur la bonne réponse ci-dessus.
-                    </div>
-                  )}
+              <div key={itemIndex}>
+                {showCourseHeading && (
+                  <div className="panel-title" style={{ marginTop: itemIndex > 0 ? 14 : 0 }}>
+                    {it.courseName}
+                  </div>
+                )}
+                <div className="ai-proposal" style={{ cursor: "default" }}>
+                  <input
+                    type="checkbox"
+                    checked={it.included && !needsAnswer}
+                    disabled={needsAnswer}
+                    onChange={() => toggleIncluded(itemIndex)}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div className="ai-proposal-prompt">{it.prompt}</div>
+                    <ul className="ai-proposal-choices">
+                      {it.choices.map((c, choiceIndex) => {
+                        const isCorrect = it.correctIndexes.includes(choiceIndex);
+                        return (
+                          <li
+                            key={choiceIndex}
+                            className={`ai-choice-toggle ${isCorrect ? "correct" : ""}`}
+                            onClick={() => toggleCorrect(itemIndex, choiceIndex)}
+                          >
+                            {c}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {needsAnswer && (
+                      <div className="ai-needs-answer">
+                        ⚠️ Aucun corrigé trouvé — clique sur la bonne réponse ci-dessus.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );

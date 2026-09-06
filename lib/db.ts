@@ -188,11 +188,13 @@ export async function addQuestion(
   moduleId: string,
   prompt: string,
   choices: string[],
-  correctIndexes: number[]
+  correctIndexes: number[],
+  courseName?: string
 ): Promise<Question> {
   const question: Question = {
     id: generateId(),
     moduleId,
+    courseName: courseName?.trim() || undefined,
     prompt,
     choices,
     correctIndexes,

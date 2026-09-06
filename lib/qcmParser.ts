@@ -8,6 +8,14 @@
 // corrigé correspondant n'est trouvé dans le texte (même règle que le mode
 // IA "extract" — l'écran de relecture gère le reste).
 //
+// Un cahier de contrôle regroupe souvent ses questions par cours, chacun
+// avec sa propre numérotation qui repart à 1 — d'où le support d'un
+// séparateur "=== Nom du cours ===" (produit par le prompt de mise en forme
+// recommandé à l'utilisateur) : le texte est d'abord découpé en sections sur
+// ce marqueur, puis chaque section est analysée indépendamment comme un
+// mini-document (sa propre numérotation, son propre corrigé), avant que les
+// questions résultantes ne soient étiquetées avec le nom de leur cours.
+//
 // Ciblé sur un format donné plutôt qu'universel : fonctionne très bien sur un
 // modèle de document cohérent (comme un cahier de contrôle toujours mis en
 // forme pareil), mais peut manquer des questions sur un texte au format très
@@ -48,6 +56,9 @@ const YEAR_ONLY_LINE_RE = /^\s*20\d{2}\s*$/;
 // espace" comme CHOICE_MARKER_RE) pour ne jamais confondre une lettre isolée
 // au milieu d'une phrase (ex. "groupe A") avec un marqueur de proposition.
 const BARE_CHOICE_LETTER_RE = /^([A-E])[ \t]+(?=[A-ZÀ-ÖØ-Ý])/gm;
+// Séparateur de cours : une ligne "=== Nom du cours ===" (2 signes "=" ou
+// plus de chaque côté, espaces tolérées).
+const COURSE_HEADER_RE = /^={2,}\s*(.+?)\s*={2,}$/;
 
 interface Marker {
   index: number;
@@ -78,7 +89,41 @@ function letterGroupToIndexes(letters: string): number[] {
   return [...letters.toUpperCase()].map((ch) => ch.charCodeAt(0) - "A".charCodeAt(0));
 }
 
+// Découpe le texte en sections sur les séparateurs "=== Nom du cours ===".
+// Le texte avant le tout premier séparateur (ou l'unique section s'il n'y en
+// a aucun) a courseName undefined — cas normal d'un simple collage sans
+// notion de cours, qui doit continuer à fonctionner exactement comme avant.
+function splitByCourse(rawText: string): { courseName: string | undefined; text: string }[] {
+  const sections: { courseName: string | undefined; text: string }[] = [];
+  let currentName: string | undefined;
+  let currentLines: string[] = [];
+
+  const flush = () => {
+    if (currentLines.length > 0) sections.push({ courseName: currentName, text: currentLines.join("\n") });
+    currentLines = [];
+  };
+
+  for (const line of rawText.split(/\r?\n/)) {
+    const header = clean(line).match(COURSE_HEADER_RE);
+    if (header) {
+      flush();
+      currentName = header[1];
+    } else {
+      currentLines.push(line);
+    }
+  }
+  flush();
+
+  return sections;
+}
+
 export function parseQuestionsFromPlainText(rawText: string): GeneratedQuestion[] {
+  return splitByCourse(rawText).flatMap(({ courseName, text }) =>
+    parseSection(text).map((q) => (courseName ? { ...q, courseName } : q))
+  );
+}
+
+function parseSection(rawText: string): GeneratedQuestion[] {
   // 1) Isole le corrigé ligne par ligne AVANT toute autre analyse : une ligne
   //    reconnue comme corrigé (ou comme simple repère d'année) est retirée du
   //    texte, sinon elle pollue le prompt ou la dernière proposition de la

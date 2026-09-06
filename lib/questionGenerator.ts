@@ -24,6 +24,10 @@ export interface GeneratedQuestion {
   prompt: string;
   choices: string[];
   correctIndexes: number[];
+  // Renseigné uniquement par parseQuestionsFromPlainText (lib/qcmParser.ts)
+  // quand le texte collé contient des séparateurs de cours ("=== Nom ===") —
+  // les modes IA ne segmentent pas par cours pour l'instant.
+  courseName?: string;
 }
 
 export async function extractCourseText(course: Course): Promise<string> {
