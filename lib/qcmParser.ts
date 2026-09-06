@@ -33,10 +33,18 @@
 import type { GeneratedQuestion } from "./questionGenerator";
 
 // Un marqueur de question/proposition est un numéro ou une lettre suivi d'un
-// séparateur (point, tiret, parenthèse fermante) puis d'un espace — précédé
-// par un début de texte ou un espace (jamais au milieu d'un mot/nombre).
-const TOP_LEVEL_MARKER_RE = /(?:^|\s)(\d{1,3})\s*[-.)]\s*/g;
-const CHOICE_MARKER_RE = /(?:^|\s)([A-E])\s*[-.)]\s*/g;
+// séparateur (point, tiret, parenthèse fermante) puis d'un ESPACE RÉEL —
+// précédé par un début de texte ou un espace (jamais au milieu d'un mot/
+// nombre). L'espace après le séparateur doit être obligatoire (\s+, pas
+// \s*) : un texte médical truffé de valeurs numériques ("...dépassant les
+// 120.10³/ml") contient de faux candidats ("120." suivi directement d'un
+// chiffre, sans espace) qui seraient sinon lus comme une question 120 — ce
+// qui corrompt le compteur de numérotation attendu et fait disparaître
+// silencieusement toutes les questions suivantes (constaté sur un vrai
+// cahier de contrôle : valeur de laboratoire "120.10³/ml" dans une
+// proposition → 7 questions perdues après ce point).
+const TOP_LEVEL_MARKER_RE = /(?:^|\s)(\d{1,3})\s*[-.)]\s+/g;
+const CHOICE_MARKER_RE = /(?:^|\s)([A-E])\s*[-.)]\s+/g;
 // Ligne de corrigé : un numéro suivi d'une ou plusieurs lettres A-E (majuscule
 // ou minuscule), séparateur optionnel — couvre aussi bien "1-B" / "2 . C" que
 // le format compact d'un cahier de contrôle "1ac" / "2abcd" (plusieurs bonnes
@@ -173,7 +181,7 @@ function parseSection(rawText: string): GeneratedQuestion[] {
     }
   }
 
-  const drafts: { prompt: string; choices: string[] }[] = [];
+  const drafts: { num: number; prompt: string; choices: string[] }[] = [];
   for (let i = 0; i < topLevel.length; i++) {
     const start = topLevel[i].contentStart;
     const end = i + 1 < topLevel.length ? topLevel[i + 1].index : text.length;
@@ -192,12 +200,17 @@ function parseSection(rawText: string): GeneratedQuestion[] {
     }
 
     if (prompt.length === 0 || choices.length < 2 || choices.length > 6) continue;
-    drafts.push({ prompt, choices });
+    drafts.push({ num: topLevel[i].num, prompt, choices });
   }
 
-  return drafts.map((q, i) => {
-    const questionNumber = i + 1;
-    const answerIndexes = answerByNumber.get(questionNumber) ?? [];
+  // Le corrigé est retrouvé par le NUMÉRO IMPRIMÉ de la question (topLevel[i].num),
+  // pas par sa position dans la liste (i+1) : un cours qui poursuit une
+  // numérotation globale (ex: "17. …" à "33. …", pas "1. …" à "17. …") a un
+  // corrigé qui référence ces mêmes numéros 17-33, jamais 1-17 — utiliser la
+  // position ferait chercher un corrigé "1" à "17" inexistant et perdrait
+  // silencieusement toutes les bonnes réponses de cette section.
+  return drafts.map((q) => {
+    const answerIndexes = answerByNumber.get(q.num) ?? [];
     const correctIndexes = answerIndexes.filter((idx) => idx >= 0 && idx < q.choices.length);
     return { prompt: q.prompt, choices: q.choices, correctIndexes };
   });
