@@ -13,6 +13,11 @@ import QuizRunner from "./QuizRunner";
 
 type Mode = "bank" | "quiz";
 
+// Sentinelle utilisée par CourseProgressList pour désigner le groupe "Sans
+// cours" dans l'URL (le distingue de "pas de paramètre course" = tout le
+// module).
+const NO_COURSE_PARAM = "__sans_cours__";
+
 export default function RevisionHub() {
   const {
     years,
@@ -42,8 +47,13 @@ export default function RevisionHub() {
   // Progression). Par ID, pas par nom : deux modules peuvent légitimement
   // s'appeler pareil dans des années différentes, et .find() par nom
   // atterrirait alors sur un module au hasard parmi les homonymes.
+  // Un ?course=... additionnel (CourseProgressList) lance directement le
+  // quiz filtré sur ce cours, plutôt que de laisser l'utilisateur rechercher
+  // le bon bouton "Lancer" dans une liste qui peut compter des dizaines de
+  // cours.
   const searchParams = useSearchParams();
   const moduleIdParam = searchParams.get("moduleId");
+  const courseParam = searchParams.get("course");
   const appliedModuleParam = useRef(false);
 
   useEffect(() => {
@@ -52,9 +62,13 @@ export default function RevisionHub() {
     if (target) {
       setSelectedYearId(target.yearId);
       setSelectedModuleId(target.id);
+      if (courseParam !== null) {
+        setQuizCourseName(courseParam === NO_COURSE_PARAM ? null : courseParam);
+        setMode("quiz");
+      }
       appliedModuleParam.current = true;
     }
-  }, [moduleIdParam, modules, loadingModules, setSelectedYearId, setSelectedModuleId]);
+  }, [moduleIdParam, courseParam, modules, loadingModules, setSelectedYearId, setSelectedModuleId]);
 
   const selectedModule = modulesForYear.find((m) => m.id === selectedModuleId) ?? null;
 
