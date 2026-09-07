@@ -53,7 +53,15 @@ export async function pdfToImageBlobs(
       await page.render({ canvasContext: context, viewport, canvas }).promise;
 
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (blob) blobs.push(blob);
+      // Ne jamais sauter une page en silence : le texte OCR final aurait un
+      // trou sans que rien ne le signale, avec un décompte de progression
+      // qui ne colle plus au nombre réel de pages traitées.
+      if (!blob) {
+        throw new Error(
+          `Échec de conversion de la page ${pageNum}/${pdf.numPages} du PDF — réessaie, ou scanne cette page séparément.`
+        );
+      }
+      blobs.push(blob);
     }
 
     return blobs;

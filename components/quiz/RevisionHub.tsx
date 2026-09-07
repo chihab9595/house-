@@ -38,20 +38,23 @@ export default function RevisionHub() {
   // de filtre" de "filtré sur le groupe sans cours".
   const [quizCourseName, setQuizCourseName] = useState<string | null | undefined>(undefined);
 
-  // Permet à l'assistant House de présélectionner un module via /revision?module=Nom
+  // Présélectionne un module via /revision?moduleId=... (utilisé par la page
+  // Progression). Par ID, pas par nom : deux modules peuvent légitimement
+  // s'appeler pareil dans des années différentes, et .find() par nom
+  // atterrirait alors sur un module au hasard parmi les homonymes.
   const searchParams = useSearchParams();
-  const moduleParam = searchParams.get("module");
+  const moduleIdParam = searchParams.get("moduleId");
   const appliedModuleParam = useRef(false);
 
   useEffect(() => {
-    if (appliedModuleParam.current || !moduleParam || loadingModules) return;
-    const target = modules.find((m) => m.name.toLowerCase() === moduleParam.toLowerCase());
+    if (appliedModuleParam.current || !moduleIdParam || loadingModules) return;
+    const target = modules.find((m) => m.id === moduleIdParam);
     if (target) {
       setSelectedYearId(target.yearId);
       setSelectedModuleId(target.id);
       appliedModuleParam.current = true;
     }
-  }, [moduleParam, modules, loadingModules, setSelectedYearId, setSelectedModuleId]);
+  }, [moduleIdParam, modules, loadingModules, setSelectedYearId, setSelectedModuleId]);
 
   const selectedModule = modulesForYear.find((m) => m.id === selectedModuleId) ?? null;
 

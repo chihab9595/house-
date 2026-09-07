@@ -10,7 +10,7 @@ import GeneratedQuestionsPanel from "@/components/quiz/GeneratedQuestionsPanel";
 interface CoursesPanelProps {
   selectedModule: CourseModule | null;
   courses: Course[];
-  onImport: (name: string, file: File | null) => void;
+  onImport: (name: string, file: File | null) => Promise<void>;
   onRemove: (courseId: string) => void;
 }
 
@@ -28,6 +28,8 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
   const [aiPanel, setAiPanel] = useState<{ courseId: string; mode: "generate" | "extract" | "parse" } | null>(
     null
   );
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   function toggleAiPanel(courseId: string, mode: "generate" | "extract" | "parse") {
     setAiPanel((prev) => (prev?.courseId === courseId && prev.mode === mode ? null : { courseId, mode }));
@@ -41,13 +43,24 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
     }
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    onImport(name, file);
-    setName("");
-    setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setImporting(true);
+    setImportError(null);
+    try {
+      // Attend la confirmation avant de vider le formulaire — sinon un échec
+      // silencieux fait perdre le nom saisi et le fichier choisi sans que
+      // rien ne le signale.
+      await onImport(name, file);
+      setName("");
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch {
+      setImportError("Échec de l'import du cours — réessaie.");
+    } finally {
+      setImporting(false);
+    }
   }
 
   if (!selectedModule) {
@@ -163,10 +176,15 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
             style={{ display: "none" }}
           />
         </label>
-        <button type="submit" className="inline-btn" disabled={!name.trim()}>
-          Importer
+        <button type="submit" className="inline-btn" disabled={!name.trim() || importing}>
+          {importing ? "Import…" : "Importer"}
         </button>
       </form>
+      {importError && (
+        <div className="empty-hint" style={{ color: "var(--pulse)" }}>
+          {importError}
+        </div>
+      )}
     </div>
   );
 }

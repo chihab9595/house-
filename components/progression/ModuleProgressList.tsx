@@ -51,7 +51,7 @@ export default function ModuleProgressList() {
                     {m.accuracy}%
                   </span>
                 )}
-                <Link href={`/revision?module=${encodeURIComponent(m.name)}`} className="inline-btn">
+                <Link href={`/revision?moduleId=${encodeURIComponent(m.id)}`} className="inline-btn">
                   Réviser
                 </Link>
               </div>
