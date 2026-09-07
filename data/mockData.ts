@@ -6,7 +6,6 @@ import type { NavModule, QuickCommand, Weather } from "@/lib/types";
 
 export const navModules: NavModule[] = [
   { label: "Tableau de bord", href: "/" },
-  { label: "Assistant IA", href: "/assistant" },
   { label: "Mes cours", href: "/cours" },
   { label: "Annales scannées", href: "/annales" },
   { label: "Sessions de révision", href: "/revision" },

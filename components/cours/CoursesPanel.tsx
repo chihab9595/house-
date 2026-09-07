@@ -14,7 +14,7 @@ interface CoursesPanelProps {
   onRemove: (courseId: string) => void;
 }
 
-function supportsAiGeneration(course: Course): boolean {
+function supportsTextExtraction(course: Course): boolean {
   const type = course.fileType ?? "";
   const name = course.fileName ?? "";
   return type === "application/pdf" || type.startsWith("text/") || /\.(pdf|txt|md)$/i.test(name);
@@ -25,14 +25,12 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const readingTimer = useReadingTimer();
-  const [aiPanel, setAiPanel] = useState<{ courseId: string; mode: "generate" | "extract" | "parse" } | null>(
-    null
-  );
+  const [openCourseId, setOpenCourseId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  function toggleAiPanel(courseId: string, mode: "generate" | "extract" | "parse") {
-    setAiPanel((prev) => (prev?.courseId === courseId && prev.mode === mode ? null : { courseId, mode }));
+  function toggleParsePanel(courseId: string) {
+    setOpenCourseId((prev) => (prev === courseId ? null : courseId));
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -106,30 +104,10 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                       {isReadingThis ? `⏸️ Terminer (${formatMmSs(readingTimer.elapsedSeconds)})` : "📖 Lire"}
                     </button>
                   )}
-                  {supportsAiGeneration(c) && (
-                    <>
-                      <button
-                        type="button"
-                        className="inline-btn"
-                        onClick={() => toggleAiPanel(c.id, "parse")}
-                      >
-                        ⚡ Analyser directement
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-btn"
-                        onClick={() => toggleAiPanel(c.id, "extract")}
-                      >
-                        🤖 Extraire questions
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-btn"
-                        onClick={() => toggleAiPanel(c.id, "generate")}
-                      >
-                        🤖 Générer questions
-                      </button>
-                    </>
+                  {supportsTextExtraction(c) && (
+                    <button type="button" className="inline-btn" onClick={() => toggleParsePanel(c.id)}>
+                      ⚡ Analyser directement
+                    </button>
                   )}
                   <button
                     type="button"
@@ -144,12 +122,11 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
                     ✕
                   </button>
                 </div>
-                {aiPanel?.courseId === c.id && (
+                {openCourseId === c.id && (
                   <GeneratedQuestionsPanel
                     moduleId={c.moduleId}
-                    mode={aiPanel.mode}
                     getSourceText={() => extractCourseText(c)}
-                    onClose={() => setAiPanel(null)}
+                    onClose={() => setOpenCourseId(null)}
                   />
                 )}
               </div>
