@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono, Rajdhani } from "next/font/google";
-import Header from "@/components/layout/Header";
-import FooterBar from "@/components/layout/FooterBar";
+import { cookies } from "next/headers";
+import { Inter, JetBrains_Mono, Rajdhani, Poppins } from "next/font/google";
+import AppShell from "@/components/layout/AppShell";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
 import AutoBackupManager from "@/components/pwa/AutoBackupManager";
+import { DEFAULT_THEME, THEME_COOKIE, isThemeId } from "@/lib/themes";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,6 +21,12 @@ const rajdhani = Rajdhani({
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   weight: ["400", "500", "600"],
+  subsets: ["latin"],
+});
+
+const poppins = Poppins({
+  variable: "--font-poppins",
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
@@ -44,18 +51,19 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const cookieStore = await cookies();
+  const cookieValue = cookieStore.get(THEME_COOKIE)?.value;
+  const theme = isThemeId(cookieValue) ? cookieValue : DEFAULT_THEME;
+
   return (
     <html
       lang="fr"
-      className={`${inter.variable} ${rajdhani.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      data-theme={theme}
+      className={`${inter.variable} ${rajdhani.variable} ${jetbrainsMono.variable} ${poppins.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans" style={{ fontFamily: "var(--font-inter), sans-serif" }}>
-        <div className="shell">
-          <Header />
-          {children}
-          <FooterBar />
-        </div>
+      <body className="min-h-full flex flex-col font-sans">
+        <AppShell initialTheme={theme}>{children}</AppShell>
         <ServiceWorkerRegister />
         <AutoBackupManager />
       </body>
