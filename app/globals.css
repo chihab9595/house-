@@ -384,6 +384,14 @@ html[data-theme="clair"] .placeholder-panel .title {
   cursor: not-allowed;
 }
 
+.inline-btn.weak-btn {
+  color: var(--pulse);
+}
+
+.inline-btn.weak-btn:hover {
+  border-color: var(--pulse);
+}
+
 .course-list {
   display: flex;
   flex-direction: column;
@@ -1018,6 +1026,14 @@ html[data-theme="clair"] .ai-proposal {
 
 .btn-ghost:hover {
   border-color: var(--cyan);
+}
+
+.btn-ghost.weak-btn {
+  color: var(--pulse);
+}
+
+.btn-ghost.weak-btn:hover {
+  border-color: var(--pulse);
 }
 
 /* CENTRE */

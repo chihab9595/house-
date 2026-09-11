@@ -64,26 +64,38 @@ export function useQuizSession(moduleId: string | null) {
     setRevealed(true);
   }, [selected, currentQuestion]);
 
+  const persistProgress = useCallback(async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    if (moduleId && answers.length > 0) {
+      const score = answers.filter((a) => a.correct).length;
+      await db.saveAttempt({ moduleId, answers, score, total: answers.length, completedAt: Date.now() });
+      const startedAt = startedAtRef.current;
+      if (startedAt) {
+        const durationSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        await db.addStudySession(moduleId, durationSeconds, todayIsoDate());
+      }
+    }
+  }, [moduleId, answers]);
+
   const next = useCallback(async () => {
     if (index + 1 >= order.length) {
-      if (finishingRef.current) return;
-      finishingRef.current = true;
-      const score = answers.filter((a) => a.correct).length;
-      if (moduleId && answers.length > 0) {
-        await db.saveAttempt({ moduleId, answers, score, total: answers.length, completedAt: Date.now() });
-        const startedAt = startedAtRef.current;
-        if (startedAt) {
-          const durationSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-          await db.addStudySession(moduleId, durationSeconds, todayIsoDate());
-        }
-      }
+      await persistProgress();
       setPhase("finished");
     } else {
       setIndex((i) => i + 1);
       setSelected(new Set());
       setRevealed(false);
     }
-  }, [index, order.length, answers, moduleId]);
+  }, [index, order.length, persistProgress]);
+
+  // Quitter en cours de route ne doit pas perdre les réponses déjà données :
+  // on enregistre une tentative partielle (uniquement les questions
+  // réellement répondues) avant de sortir, comme si l'étudiant avait choisi
+  // de s'arrêter là plutôt que de tout recommencer plus tard.
+  const quit = useCallback(async () => {
+    await persistProgress();
+  }, [persistProgress]);
 
   const reset = useCallback(() => setPhase("idle"), []);
 
@@ -99,6 +111,7 @@ export function useQuizSession(moduleId: string | null) {
     toggleAnswer,
     confirmAnswer,
     next,
+    quit,
     reset,
   };
 }

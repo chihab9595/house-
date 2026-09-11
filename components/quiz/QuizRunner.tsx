@@ -84,7 +84,14 @@ export default function QuizRunner({ moduleId, questions, onExit }: QuizRunnerPr
         })}
       </div>
       <div className="quiz-runner-actions">
-        <button type="button" className="inline-btn" onClick={onExit}>
+        <button
+          type="button"
+          className="inline-btn"
+          onClick={async () => {
+            await session.quit();
+            onExit();
+          }}
+        >
           Quitter
         </button>
         {!session.revealed ? (

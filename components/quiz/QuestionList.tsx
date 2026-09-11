@@ -5,10 +5,13 @@ interface QuestionListProps {
   onRemove: (id: string) => void;
   // Absent = pas de bouton "lancer" par groupe (ex: écran de relecture avant
   // enregistrement, où il n'y a rien à lancer).
-  onLaunchCourse?: (courseName: string | null) => void;
+  onLaunchCourse?: (courseName: string | null, weakOnly?: boolean) => void;
+  // Questions dont la dernière réponse était fausse (lib/weakQuestions.ts) —
+  // sert uniquement à afficher un bouton de révision ciblée par cours.
+  weakIds?: Set<string>;
 }
 
-export default function QuestionList({ questions, onRemove, onLaunchCourse }: QuestionListProps) {
+export default function QuestionList({ questions, onRemove, onLaunchCourse, weakIds }: QuestionListProps) {
   if (questions.length === 0) {
     return <div className="empty-hint">Aucune question dans ce module pour l&apos;instant.</div>;
   }
@@ -37,17 +40,29 @@ export default function QuestionList({ questions, onRemove, onLaunchCourse }: Qu
     <div className="flex flex-col gap-3.5">
       {order.map((key) => {
         const group = byCourse.get(key)!;
+        const weakCount = weakIds ? group.filter((q) => weakIds.has(q.id)).length : 0;
         return (
           <div key={key ?? "__sans_cours__"}>
             <div
               className="panel-title"
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}
             >
               <span>{key ?? "Sans cours"}</span>
               {onLaunchCourse && (
-                <button type="button" className="inline-btn" onClick={() => onLaunchCourse(key)}>
-                  ▶ Lancer ({group.length})
-                </button>
+                <span style={{ display: "flex", gap: 8 }}>
+                  {weakCount > 0 && (
+                    <button
+                      type="button"
+                      className="inline-btn weak-btn"
+                      onClick={() => onLaunchCourse(key, true)}
+                    >
+                      🎯 Points faibles ({weakCount})
+                    </button>
+                  )}
+                  <button type="button" className="inline-btn" onClick={() => onLaunchCourse(key)}>
+                    ▶ Lancer ({group.length})
+                  </button>
+                </span>
               )}
             </div>
             <FlatQuestionList questions={group} onRemove={onRemove} />
