@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import type { ComponentType, CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { useActivityFeed } from "@/lib/useActivityFeed";
 import { useQuizStats } from "@/lib/useQuizStats";
@@ -11,12 +11,25 @@ import { iconForModuleName } from "@/lib/moduleIcon";
 import {
   daysLeftLabel,
   examBadgeTone,
-  fileIconFor,
   formatExamDate,
   formatFileSize,
   formatImportedDate,
   formatRelativeTime,
 } from "@/lib/format";
+import {
+  IconBell,
+  IconBook,
+  IconCalendar,
+  IconFile,
+  IconGraduationCap,
+  IconPlay,
+  IconPlus,
+  IconTarget,
+  IconUpload,
+  IconWave,
+  IconZap,
+  type IconProps,
+} from "@/components/icons/Icons";
 import WeeklyTrendChart from "./WeeklyTrendChart";
 
 const NO_COURSE_PARAM = "__sans_cours__";
@@ -24,12 +37,12 @@ const MAX_MODULES_SHOWN = 5;
 const MAX_COURSES_SHOWN = 3;
 
 function LightCard({
-  icon,
+  Icon,
   title,
   href,
   children,
 }: {
-  icon: string;
+  Icon: ComponentType<IconProps>;
   title: string;
   href?: string;
   children: ReactNode;
@@ -38,7 +51,9 @@ function LightCard({
     <div className="light-card">
       <div className="light-card-head">
         <div className="light-card-title">
-          <span className="light-card-icon">{icon}</span>
+          <span className="light-card-icon">
+            <Icon size={17} />
+          </span>
           {title}
         </div>
         {href && (
@@ -70,7 +85,9 @@ export default function LightDashboard() {
     <div className="light-dashboard">
       <div className="light-topbar">
         <div>
-          <div className="light-greeting">Bonjour, étudiant 👋</div>
+          <div className="light-greeting">
+            Bonjour, étudiant <IconWave size={22} className="light-wave" />
+          </div>
           <div className="light-greeting-sub">
             Continue tes efforts, chaque révision te rapproche de tes objectifs !
           </div>
@@ -80,14 +97,14 @@ export default function LightDashboard() {
             <span className="dot" /> Mode hors-ligne
           </span>
           <span className="light-bell" title={`${notifications.length} notification(s)`}>
-            🔔
+            <IconBell size={17} />
             {notifications.length > 0 && <span className="light-bell-badge">{notifications.length}</span>}
           </span>
         </div>
       </div>
 
       <div className="light-grid-3">
-        <LightCard icon="🎯" title="Ma révision" href="/revision">
+        <LightCard Icon={IconTarget} title="Ma révision" href="/revision">
           <div className="light-stat-tiles">
             <div className="light-stat-tile tile-pink">
               <div className="v">{loading ? "…" : extras.reviewCount}</div>
@@ -105,32 +122,37 @@ export default function LightDashboard() {
           {!loading && <WeeklyTrendChart days={extras.trend} />}
         </LightCard>
 
-        <LightCard icon="📖" title="Mes modules" href="/cours">
+        <LightCard Icon={IconBook} title="Mes modules" href="/cours">
           {loading ? (
             <div className="light-empty">Chargement…</div>
           ) : topModules.length === 0 ? (
             <div className="light-empty">Crée un module dans « Mes cours » pour commencer.</div>
           ) : (
             <div className="light-module-list">
-              {topModules.map((m) => (
-                <div className="light-module-row" key={m.id}>
-                  <span className="light-module-icon">{iconForModuleName(m.name)}</span>
-                  <div className="light-module-body">
-                    <div className="light-module-top">
-                      <span className="name">{m.name}</span>
-                      <span className="pct">{m.accuracy !== null ? `${m.accuracy}%` : "—"}</span>
-                    </div>
-                    <div className="light-module-track">
-                      <div className="light-module-fill" style={{ width: `${m.accuracy ?? 0}%` }} />
+              {topModules.map((m) => {
+                const { Icon, bg, fg } = iconForModuleName(m.name);
+                return (
+                  <div className="light-module-row" key={m.id}>
+                    <span className="light-module-icon" style={{ background: bg, color: fg }}>
+                      <Icon size={16} />
+                    </span>
+                    <div className="light-module-body">
+                      <div className="light-module-top">
+                        <span className="name">{m.name}</span>
+                        <span className="pct">{m.accuracy !== null ? `${m.accuracy}%` : "—"}</span>
+                      </div>
+                      <div className="light-module-track">
+                        <div className="light-module-fill" style={{ width: `${m.accuracy ?? 0}%` }} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </LightCard>
 
-        <LightCard icon="🎓" title="Progression des cours" href="/progression">
+        <LightCard Icon={IconGraduationCap} title="Progression des cours" href="/progression">
           {loading ? (
             <div className="light-empty">Chargement…</div>
           ) : weakestCourses.length === 0 ? (
@@ -167,7 +189,7 @@ export default function LightDashboard() {
       </div>
 
       <div className="light-grid-3">
-        <LightCard icon="⚡" title="Quiz récents" href="/revision">
+        <LightCard Icon={IconZap} title="Quiz récents" href="/revision">
           {loading ? (
             <div className="light-empty">Chargement…</div>
           ) : extras.recentAttempts.length === 0 ? (
@@ -192,7 +214,7 @@ export default function LightDashboard() {
           )}
         </LightCard>
 
-        <LightCard icon="📚" title="Bibliothèque" href="/cours">
+        <LightCard Icon={IconBook} title="Bibliothèque" href="/cours">
           {loading ? (
             <div className="light-empty">Chargement…</div>
           ) : extras.recentCourses.length === 0 ? (
@@ -201,7 +223,7 @@ export default function LightDashboard() {
             <div className="light-list">
               {extras.recentCourses.map((c) => (
                 <div className="light-list-row" key={c.id}>
-                  <span className="light-file-icon">{fileIconFor(c.fileType)}</span>
+                  <IconFile size={22} tint={fileTint(c.fileType)} />
                   <div style={{ flex: 1 }}>
                     <div className="name">{c.name}</div>
                     <div className="meta">
@@ -215,13 +237,15 @@ export default function LightDashboard() {
           )}
         </LightCard>
 
-        <LightCard icon="📝" title="Annales" href="/annales">
+        <LightCard Icon={IconCalendar} title="Annales" href="/annales">
           <div className="light-empty" style={{ paddingBottom: 10 }}>
             {examCalendar.next ? "Prochain contrôle estimé" : "Aucun contrôle planifié"}
           </div>
           {examCalendar.next && (
             <div className="light-list-row" style={{ marginBottom: 10 }}>
-              <span className="light-file-icon">🗓️</span>
+              <span className="light-file-icon">
+                <IconCalendar size={19} />
+              </span>
               <div style={{ flex: 1 }}>
                 <div className="name">{examCalendar.next.name}</div>
                 <div className="meta">{formatExamDate(examCalendar.next.date)}</div>
@@ -240,7 +264,9 @@ export default function LightDashboard() {
 
       <div className="light-quick-actions">
         <div className="light-quick-head">
-          <span className="light-card-icon">⚡</span>
+          <span className="light-card-icon">
+            <IconZap size={17} />
+          </span>
           <div>
             <div className="title">Actions rapides</div>
             <div className="sub">Accède directement à tes outils essentiels</div>
@@ -248,19 +274,34 @@ export default function LightDashboard() {
         </div>
         <div className="light-quick-buttons">
           <Link href="/revision" className="light-quick-btn tint-violet">
-            🚀 Lancer un quiz
+            <span className="light-quick-btn-label">
+              <IconPlay size={17} /> Lancer un quiz
+            </span>
             <span className="sub">Teste tes connaissances</span>
           </Link>
           <Link href="/cours" className="light-quick-btn tint-green">
-            ⬆️ Importer un cours
+            <span className="light-quick-btn-label">
+              <IconUpload size={17} /> Importer un cours
+            </span>
             <span className="sub">Ajouter un PDF ou un document</span>
           </Link>
           <Link href="/revision" className="light-quick-btn tint-blue">
-            ➕ Ajouter des QCM
+            <span className="light-quick-btn-label">
+              <IconPlus size={17} /> Ajouter des QCM
+            </span>
             <span className="sub">Créer ou coller des questions</span>
           </Link>
         </div>
       </div>
     </div>
   );
+}
+
+function fileTint(fileType: string | null): string {
+  if (!fileType) return "#8b8fa8";
+  if (fileType.includes("pdf")) return "#e0405f";
+  if (fileType.includes("word") || fileType.includes("document")) return "#2f6fed";
+  if (fileType.includes("presentation") || fileType.includes("powerpoint")) return "#d97706";
+  if (fileType.startsWith("image/")) return "#16a34a";
+  return "#8b8fa8";
 }

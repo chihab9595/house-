@@ -4,15 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { formatStorageEstimate, storageUsedPercent, useStorageEstimate } from "@/lib/useStorageEstimate";
+import {
+  IconBarChart,
+  IconBook,
+  IconCalendar,
+  IconFileText,
+  IconHome,
+  IconRefresh,
+  IconServerLock,
+  IconSettings,
+} from "@/components/icons/Icons";
 
 const NAV_ITEMS = [
-  { label: "Accueil", href: "/", icon: "🏠" },
-  { label: "Bibliothèque", href: "/cours", icon: "📚" },
-  { label: "Révision", href: "/revision", icon: "🔄" },
-  { label: "Annales", href: "/annales", icon: "📝" },
-  { label: "Progression", href: "/progression", icon: "📊" },
-  { label: "Planning", href: "/planning", icon: "🗓️" },
-  { label: "Paramètres", href: "/parametres", icon: "⚙️" },
+  { label: "Accueil", href: "/", Icon: IconHome },
+  { label: "Bibliothèque", href: "/cours", Icon: IconBook },
+  { label: "Révision", href: "/revision", Icon: IconRefresh },
+  { label: "Annales", href: "/annales", Icon: IconFileText },
+  { label: "Progression", href: "/progression", Icon: IconBarChart },
+  { label: "Planning", href: "/planning", Icon: IconCalendar },
+  { label: "Paramètres", href: "/parametres", Icon: IconSettings },
 ];
 
 export default function SidebarShell({ children }: { children: ReactNode }) {
@@ -23,7 +33,9 @@ export default function SidebarShell({ children }: { children: ReactNode }) {
     <div className="light-shell">
       <aside className="light-sidebar">
         <div className="light-brand">
-          <span className="light-brand-mark">🏠</span>
+          <span className="light-brand-mark">
+            <IconHome size={19} color="#fff" />
+          </span>
           <div>
             <div className="light-brand-name">HOUSE</div>
             <div className="light-brand-tag">Ton allié en médecine</div>
@@ -37,15 +49,19 @@ export default function SidebarShell({ children }: { children: ReactNode }) {
               href={item.href}
               className={`light-nav-link ${pathname === item.href ? "active" : ""}`}
             >
-              <span className="icon">{item.icon}</span>
+              <span className="icon">
+                <item.Icon size={17} />
+              </span>
               {item.label}
             </Link>
           ))}
         </nav>
 
         <div className="light-offline-card">
-          <div className="light-offline-dot" />
-          <div className="light-offline-title">Mode hors-ligne</div>
+          <div className="light-offline-title">
+            <IconServerLock size={15} />
+            Mode hors-ligne
+          </div>
           <div className="light-offline-desc">
             Toutes vos données sont stockées localement sur votre appareil.
           </div>
