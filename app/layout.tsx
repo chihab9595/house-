@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Inter, JetBrains_Mono, Rajdhani, Poppins } from "next/font/google";
 import AppShell from "@/components/layout/AppShell";
+import ClickSoundListener from "@/components/layout/ClickSoundListener";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
 import AutoBackupManager from "@/components/pwa/AutoBackupManager";
 import { DEFAULT_THEME, THEME_COOKIE, isThemeId } from "@/lib/themes";
@@ -66,6 +67,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <AppShell initialTheme={theme}>{children}</AppShell>
         <ServiceWorkerRegister />
         <AutoBackupManager />
+        <ClickSoundListener />
       </body>
     </html>
   );

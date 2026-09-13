@@ -3,9 +3,15 @@
 import { useCallback, useRef, useState } from "react";
 import * as db from "./db";
 import { todayIsoDate } from "./format";
+import { playSound } from "./sounds";
 import type { AttemptAnswer, Question } from "./quizTypes";
 
 export type QuizPhase = "idle" | "running" | "finished";
+
+// Même seuil que celui utilisé ailleurs pour distinguer "à revoir" de
+// "maîtrisé" (voir useQuizStats.ts) — garde le retour sonore de fin de quiz
+// cohérent avec le reste des indicateurs de l'app.
+const RESULT_SOUND_THRESHOLD = 60;
 
 function shuffle<T>(items: T[]): T[] {
   const copy = [...items];
@@ -48,8 +54,12 @@ export function useQuizSession(moduleId: string | null) {
       if (revealed) return;
       setSelected((prev) => {
         const next = new Set(prev);
-        if (next.has(choiceIndex)) next.delete(choiceIndex);
-        else next.add(choiceIndex);
+        if (next.has(choiceIndex)) {
+          next.delete(choiceIndex);
+        } else {
+          next.add(choiceIndex);
+          playSound("selectAnswer");
+        }
         return next;
       });
     },
@@ -62,6 +72,7 @@ export function useQuizSession(moduleId: string | null) {
     const correct = setsEqual(selected, currentQuestion.correctIndexes);
     setAnswers((prev) => [...prev, { questionId: currentQuestion.id, chosenIndexes, correct }]);
     setRevealed(true);
+    playSound(correct ? "correct" : "wrong");
   }, [selected, currentQuestion]);
 
   const persistProgress = useCallback(async () => {
@@ -80,14 +91,17 @@ export function useQuizSession(moduleId: string | null) {
 
   const next = useCallback(async () => {
     if (index + 1 >= order.length) {
+      const score = answers.filter((a) => a.correct).length;
+      const pct = answers.length > 0 ? (score / answers.length) * 100 : 0;
       await persistProgress();
+      playSound(pct >= RESULT_SOUND_THRESHOLD ? "aboveAverage" : "belowAverage");
       setPhase("finished");
     } else {
       setIndex((i) => i + 1);
       setSelected(new Set());
       setRevealed(false);
     }
-  }, [index, order.length, persistProgress]);
+  }, [index, order.length, answers, persistProgress]);
 
   // Quitter en cours de route ne doit pas perdre les réponses déjà données :
   // on enregistre une tentative partielle (uniquement les questions

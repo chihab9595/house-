@@ -5,6 +5,7 @@ import type { Course, CourseModule } from "@/lib/courseTypes";
 import { fileIconFor, formatFileSize, formatImportedDate, formatMmSs } from "@/lib/format";
 import { useReadingTimer } from "@/lib/useReadingTimer";
 import { extractCourseText } from "@/lib/questionGenerator";
+import { playSound } from "@/lib/sounds";
 import GeneratedQuestionsPanel from "@/components/quiz/GeneratedQuestionsPanel";
 
 interface CoursesPanelProps {
@@ -44,6 +45,7 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    playSound("importCourse");
     setImporting(true);
     setImportError(null);
     try {
@@ -153,7 +155,7 @@ export default function CoursesPanel({ selectedModule, courses, onImport, onRemo
             style={{ display: "none" }}
           />
         </label>
-        <button type="submit" className="inline-btn" disabled={!name.trim() || importing}>
+        <button type="submit" className="inline-btn" data-click-sound="none" disabled={!name.trim() || importing}>
           {importing ? "Import…" : "Importer"}
         </button>
       </form>
