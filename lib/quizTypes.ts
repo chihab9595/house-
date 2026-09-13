@@ -9,6 +9,13 @@
 export interface Question {
   id: string;
   moduleId: string;
+  // Nom du cours/chapitre dans le module (ex: "Dysphagie", "Troubles de
+  // l'hémostase") — optionnel, absent sur les questions créées avant cette
+  // fonctionnalité ou ajoutées manuellement sans le préciser. Un simple
+  // libellé texte plutôt qu'une relation vers Course (lib/courseTypes.ts) :
+  // un cahier de contrôle regroupe des questions par intitulé de cours sans
+  // que ce cours ait forcément été importé comme document dans l'app.
+  courseName?: string;
   prompt: string;
   choices: string[];
   correctIndexes: number[];

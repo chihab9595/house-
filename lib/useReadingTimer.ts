@@ -20,6 +20,14 @@ export function useReadingTimer() {
   const visibleSinceRef = useRef<number | null>(null);
   const moduleIdRef = useRef<string | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+
+  const releaseObjectUrl = useCallback(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  }, []);
 
   const currentTotal = useCallback(() => {
     const extra =
@@ -51,20 +59,26 @@ export function useReadingTimer() {
     setActiveCourseId(course.id);
 
     if (course.file) {
+      // Révoqué à la fin de la session de lecture (stop() ou démontage), pas
+      // après un délai fixe : un gros PDF sur une machine lente peut ne pas
+      // avoir fini de charger dans le nouvel onglet avant qu'un timer de 30s
+      // ne révoque l'URL, laissant cet onglet cassé.
+      releaseObjectUrl();
       const url = URL.createObjectURL(course.file);
+      objectUrlRef.current = url;
       window.open(url, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
     }
 
     if (tickRef.current) clearInterval(tickRef.current);
     tickRef.current = setInterval(() => {
       setElapsedSeconds(currentTotal());
     }, 1000);
-  }, [currentTotal]);
+  }, [currentTotal, releaseObjectUrl]);
 
   const stop = useCallback(async () => {
     if (activeCourseId === null || moduleIdRef.current === null) return;
     if (tickRef.current) clearInterval(tickRef.current);
+    releaseObjectUrl();
 
     const totalSeconds = currentTotal();
     const moduleId = moduleIdRef.current;
@@ -78,13 +92,14 @@ export function useReadingTimer() {
     if (totalSeconds > 0) {
       await db.addStudySession(moduleId, totalSeconds, todayIsoDate(), "reading");
     }
-  }, [activeCourseId, currentTotal]);
+  }, [activeCourseId, currentTotal, releaseObjectUrl]);
 
   // Si l'utilisateur quitte la page "Mes cours" pendant une lecture active,
   // sauvegarder ce qui a été chronométré plutôt que de le perdre.
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
+      releaseObjectUrl();
       if (moduleIdRef.current) {
         const totalSeconds = currentTotal();
         if (totalSeconds > 0) {

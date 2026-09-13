@@ -114,6 +114,26 @@ async function logEvent(type: ActivityEventType, title: string, desc: string): P
   await put(EVENTS_STORE, event);
 }
 
+// Le journal d'activité est secondaire : si résoudre le nom du module ou
+// écrire l'événement échoue après que la donnée principale (cours, examen,
+// annale, tentative) a déjà été enregistrée avec succès, ça ne doit jamais
+// faire échouer toute la fonction d'ajout — sinon l'utilisateur voit une
+// erreur pour une opération qui a en fait réussi, et risque de la relancer
+// en double.
+async function logEventBestEffort(
+  moduleId: string,
+  type: ActivityEventType,
+  build: (moduleName: string) => { title: string; desc: string }
+): Promise<void> {
+  try {
+    const moduleName = await resolveModuleName(moduleId);
+    const { title, desc } = build(moduleName);
+    await logEvent(type, title, desc);
+  } catch (err) {
+    console.warn("HOUSE : échec de la journalisation d'activité (sans impact sur la donnée déjà enregistrée) :", err);
+  }
+}
+
 export async function getEvents(): Promise<ActivityEvent[]> {
   return getAll<ActivityEvent>(EVENTS_STORE);
 }
@@ -146,7 +166,12 @@ export async function deleteModule(moduleId: string): Promise<void> {
     getExams(),
     getStudySessions(),
   ]);
-  await Promise.all([
+  // allSettled plutôt que all : si une suppression échoue, on veut quand même
+  // avoir tenté toutes les autres (moins d'orphelins qu'un abandon immédiat),
+  // puis refuser de supprimer le module tant que ses données ne sont pas
+  // toutes parties — un module réapparaîtrait sinon avec des enfants restants
+  // qu'aucun écran ne liste, invisibles mais toujours en base.
+  const results = await Promise.allSettled([
     ...courses.filter((c) => c.moduleId === moduleId).map((c) => remove(COURSES_STORE, c.id)),
     ...questions.filter((q) => q.moduleId === moduleId).map((q) => remove(QUESTIONS_STORE, q.id)),
     ...attempts.filter((a) => a.moduleId === moduleId).map((a) => remove(ATTEMPTS_STORE, a.id)),
@@ -156,6 +181,12 @@ export async function deleteModule(moduleId: string): Promise<void> {
       .filter((s) => s.moduleId === moduleId)
       .map((s) => remove(STUDY_SESSIONS_STORE, s.id)),
   ]);
+  const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failures.length > 0) {
+    throw new Error(
+      `Suppression incomplète du module : ${failures.length} élément(s) associé(s) n'ont pas pu être supprimés. Réessaie — le module reste en place tant que tout n'a pas été retiré.`
+    );
+  }
   await remove(MODULES_STORE, moduleId);
 }
 
@@ -171,8 +202,10 @@ export async function addCourse(moduleId: string, name: string, file: File | nul
     importedAt: Date.now(),
   };
   await put(COURSES_STORE, course);
-  const moduleName = await resolveModuleName(moduleId);
-  await logEvent("course_imported", `Cours importé : ${name}`, moduleName);
+  await logEventBestEffort(moduleId, "course_imported", (moduleName) => ({
+    title: `Cours importé : ${name}`,
+    desc: moduleName,
+  }));
   return course;
 }
 
@@ -188,11 +221,13 @@ export async function addQuestion(
   moduleId: string,
   prompt: string,
   choices: string[],
-  correctIndexes: number[]
+  correctIndexes: number[],
+  courseName?: string
 ): Promise<Question> {
   const question: Question = {
     id: generateId(),
     moduleId,
+    courseName: courseName?.trim() || undefined,
     prompt,
     choices,
     correctIndexes,
@@ -213,12 +248,10 @@ export async function getAttempts(): Promise<QuizAttempt[]> {
 export async function saveAttempt(attempt: Omit<QuizAttempt, "id">): Promise<QuizAttempt> {
   const full: QuizAttempt = { ...attempt, id: generateId() };
   await put(ATTEMPTS_STORE, full);
-  const moduleName = await resolveModuleName(attempt.moduleId);
-  await logEvent(
-    "quiz_completed",
-    `Quiz ${moduleName} terminé`,
-    `${attempt.score}/${attempt.total} bonnes réponses`
-  );
+  await logEventBestEffort(attempt.moduleId, "quiz_completed", (moduleName) => ({
+    title: `Quiz ${moduleName} terminé`,
+    desc: `${attempt.score}/${attempt.total} bonnes réponses`,
+  }));
   return full;
 }
 
@@ -243,12 +276,10 @@ export async function addAnnale(
     importedAt: Date.now(),
   };
   await put(ANNALES_STORE, annale);
-  const moduleName = await resolveModuleName(moduleId);
-  await logEvent(
-    "annale_scanned",
-    `Annale numérisée : ${name}`,
-    `${moduleName} · ${extractedText.trim().length} caractères extraits`
-  );
+  await logEventBestEffort(moduleId, "annale_scanned", (moduleName) => ({
+    title: `Annale numérisée : ${name}`,
+    desc: `${moduleName} · ${extractedText.trim().length} caractères extraits`,
+  }));
   return annale;
 }
 
@@ -269,8 +300,10 @@ export async function addExam(moduleId: string, name: string, date: string): Pro
     createdAt: Date.now(),
   };
   await put(EXAMS_STORE, exam);
-  const moduleName = await resolveModuleName(moduleId);
-  await logEvent("exam_added", `Contrôle planifié : ${name}`, `${moduleName} · ${formatExamDate(date)}`);
+  await logEventBestEffort(moduleId, "exam_added", (moduleName) => ({
+    title: `Contrôle planifié : ${name}`,
+    desc: `${moduleName} · ${formatExamDate(date)}`,
+  }));
   return exam;
 }
 
@@ -372,14 +405,19 @@ export async function restoreBackup(backup: BackupData): Promise<void> {
     }
   }
 
-  await Promise.all(backup.modules.map((m) => put(MODULES_STORE, m)));
-  await Promise.all(
-    backup.courses.map(async ({ fileDataUrl, ...rest }) => {
-      const file = fileDataUrl ? await dataUrlToBlob(fileDataUrl) : null;
-      const course: Course = { ...rest, file };
-      await put(COURSES_STORE, course);
-    })
+  // Décode aussi tous les fichiers AVANT d'écrire quoi que ce soit : un
+  // fileDataUrl corrompu ne doit pas planter APRÈS que "modules" ait déjà été
+  // committé — sinon l'utilisateur voit "sauvegarde invalide" alors qu'une
+  // partie a bel et bien été importée.
+  const courses: Course[] = await Promise.all(
+    backup.courses.map(async ({ fileDataUrl, ...rest }) => ({
+      ...rest,
+      file: fileDataUrl ? await dataUrlToBlob(fileDataUrl) : null,
+    }))
   );
+
+  await Promise.all(backup.modules.map((m) => put(MODULES_STORE, m)));
+  await Promise.all(courses.map((c) => put(COURSES_STORE, c)));
   await Promise.all(backup.questions.map((q) => put(QUESTIONS_STORE, q)));
   await Promise.all(backup.attempts.map((a) => put(ATTEMPTS_STORE, a)));
   await Promise.all(backup.annales.map((a) => put(ANNALES_STORE, a)));

@@ -4,6 +4,7 @@ export default function EkgTrace() {
   return (
     <svg className="ekg" viewBox="0 0 600 40" preserveAspectRatio="none">
       <polyline
+        className="ekg-line"
         points={ekgPoints}
         fill="none"
         stroke="#4de8ff"

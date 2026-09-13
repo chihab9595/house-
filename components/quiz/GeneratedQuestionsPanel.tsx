@@ -2,22 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as db from "@/lib/db";
-import {
-  extractQuestionsFromAnnaleText,
-  generateQuestionsFromText,
-  type GeneratedQuestion,
-} from "@/lib/questionGenerator";
 import { parseQuestionsFromPlainText } from "@/lib/qcmParser";
-import { useAiStatus } from "@/lib/useAiStatus";
 
 interface GeneratedQuestionsPanelProps {
   moduleId: string;
-  // "parse" : analyse déterministe locale, sans IA, instantanée — pour du
-  // texte bien structuré (questions numérotées, propositions lettrées).
-  mode: "generate" | "extract" | "parse";
   getSourceText: () => Promise<string>;
   onClose: () => void;
-  // Lance l'extraction automatiquement au montage, sans exiger un second clic
+  // Lance l'analyse automatiquement au montage, sans exiger un second clic
   // sur le bouton du formulaire — utile quand l'action déclenchante (ex:
   // "Créer les QCM" après un collage de texte) est déjà un choix explicite.
   autoStart?: boolean;
@@ -30,40 +21,31 @@ interface ReviewItem {
   choices: string[];
   correctIndexes: number[];
   included: boolean;
+  courseName?: string;
 }
 
 export default function GeneratedQuestionsPanel({
   moduleId,
-  mode,
   getSourceText,
   onClose,
   autoStart = false,
 }: GeneratedQuestionsPanelProps) {
-  const aiStatus = useAiStatus();
   const [phase, setPhase] = useState<Phase>("form");
-  const [count, setCount] = useState(5);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState(0);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const autoStarted = useRef(false);
 
   async function handleGenerate() {
     setPhase("loading");
     setError(null);
-    setProgress(null);
     try {
       const sourceText = await getSourceText();
-      const generated: GeneratedQuestion[] =
-        mode === "parse"
-          ? parseQuestionsFromPlainText(sourceText)
-          : mode === "extract"
-            ? await extractQuestionsFromAnnaleText(sourceText, (done, total) => setProgress({ done, total }))
-            : await generateQuestionsFromText(sourceText, count);
+      const generated = parseQuestionsFromPlainText(sourceText);
 
-      if (mode === "parse" && generated.length === 0) {
+      if (generated.length === 0) {
         throw new Error(
-          "Aucune question reconnue dans ce texte. Vérifie qu'il contient bien des questions numérotées (1. 2. 3…) avec des propositions lettrées (A. B. C…), ou essaie plutôt le mode IA pour un texte moins structuré."
+          "Aucune question reconnue dans ce texte. Vérifie qu'il contient bien des questions numérotées (1. 2. 3…) avec des propositions lettrées (A. B. C…)."
         );
       }
 
@@ -73,22 +55,22 @@ export default function GeneratedQuestionsPanel({
           choices: q.choices,
           correctIndexes: q.correctIndexes,
           included: q.correctIndexes.length > 0,
+          courseName: q.courseName,
         }))
       );
       setPhase("review");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de la génération.");
+      setError(err instanceof Error ? err.message : "Échec de l'analyse.");
       setPhase("form");
     }
   }
 
   useEffect(() => {
     if (!autoStart || autoStarted.current) return;
-    if (mode !== "parse" && (aiStatus.loading || !aiStatus.configured)) return;
     autoStarted.current = true;
     handleGenerate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart, mode, aiStatus.loading, aiStatus.configured]);
+  }, [autoStart]);
 
   function toggleIncluded(index: number) {
     setItems((prev) =>
@@ -126,7 +108,7 @@ export default function GeneratedQuestionsPanel({
     setPhase("loading");
     try {
       for (const it of toSave) {
-        await db.addQuestion(moduleId, it.prompt, it.choices, it.correctIndexes);
+        await db.addQuestion(moduleId, it.prompt, it.choices, it.correctIndexes, it.courseName);
       }
       setSavedCount(toSave.length);
       setPhase("saved");
@@ -134,20 +116,6 @@ export default function GeneratedQuestionsPanel({
       setError("Échec de l'enregistrement des questions.");
       setPhase("review");
     }
-  }
-
-  if (mode !== "parse" && !aiStatus.loading && !aiStatus.configured) {
-    return (
-      <div className="ai-generate-panel">
-        <div className="empty-hint" style={{ padding: 0 }}>
-          {mode === "extract" ? "Extraction" : "Génération"} IA non disponible : configure une clé
-          OpenRouter dans <strong>Paramètres</strong> pour activer cette fonctionnalité.
-        </div>
-        <button type="button" className="inline-btn" onClick={onClose} style={{ marginTop: 10 }}>
-          Fermer
-        </button>
-      </div>
-    );
   }
 
   if (phase === "saved") {
@@ -169,42 +137,49 @@ export default function GeneratedQuestionsPanel({
     return (
       <div className="ai-generate-panel">
         <div className="empty-hint" style={{ padding: "0 0 10px" }}>
-          {mode === "generate"
-            ? "Relis chaque question avant d'enregistrer — une IA peut se tromper, surtout sur du contenu médical."
-            : "Relis chaque question. Quand aucun corrigé n'a été trouvé dans le texte, coche toi-même la bonne réponse avant d'inclure la question."}
+          Relis chaque question. Quand aucun corrigé n&apos;a été trouvé dans le texte, coche toi-même la
+          bonne réponse avant d&apos;inclure la question.
         </div>
         <div className="ai-proposal-list">
           {items.map((it, itemIndex) => {
             const needsAnswer = it.correctIndexes.length === 0;
+            const showCourseHeading = it.courseName && it.courseName !== items[itemIndex - 1]?.courseName;
             return (
-              <div className="ai-proposal" key={itemIndex} style={{ cursor: "default" }}>
-                <input
-                  type="checkbox"
-                  checked={it.included && !needsAnswer}
-                  disabled={needsAnswer}
-                  onChange={() => toggleIncluded(itemIndex)}
-                />
-                <div style={{ flex: 1 }}>
-                  <div className="ai-proposal-prompt">{it.prompt}</div>
-                  <ul className="ai-proposal-choices">
-                    {it.choices.map((c, choiceIndex) => {
-                      const isCorrect = it.correctIndexes.includes(choiceIndex);
-                      return (
-                        <li
-                          key={choiceIndex}
-                          className={`ai-choice-toggle ${isCorrect ? "correct" : ""}`}
-                          onClick={() => toggleCorrect(itemIndex, choiceIndex)}
-                        >
-                          {c}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {needsAnswer && (
-                    <div className="ai-needs-answer">
-                      ⚠️ Aucun corrigé trouvé — clique sur la bonne réponse ci-dessus.
-                    </div>
-                  )}
+              <div key={itemIndex}>
+                {showCourseHeading && (
+                  <div className="panel-title" style={{ marginTop: itemIndex > 0 ? 14 : 0 }}>
+                    {it.courseName}
+                  </div>
+                )}
+                <div className="ai-proposal" style={{ cursor: "default" }}>
+                  <input
+                    type="checkbox"
+                    checked={it.included && !needsAnswer}
+                    disabled={needsAnswer}
+                    onChange={() => toggleIncluded(itemIndex)}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div className="ai-proposal-prompt">{it.prompt}</div>
+                    <ul className="ai-proposal-choices">
+                      {it.choices.map((c, choiceIndex) => {
+                        const isCorrect = it.correctIndexes.includes(choiceIndex);
+                        return (
+                          <li
+                            key={choiceIndex}
+                            className={`ai-choice-toggle ${isCorrect ? "correct" : ""}`}
+                            onClick={() => toggleCorrect(itemIndex, choiceIndex)}
+                          >
+                            {c}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {needsAnswer && (
+                      <div className="ai-needs-answer">
+                        ⚠️ Aucun corrigé trouvé — clique sur la bonne réponse ci-dessus.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -230,33 +205,8 @@ export default function GeneratedQuestionsPanel({
   return (
     <div className="ai-generate-panel">
       <div className="inline-form" style={{ flexWrap: "wrap" }}>
-        {mode === "generate" && (
-          <label className="ai-count-label">
-            Nombre de questions
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={count}
-              onChange={(e) => setCount(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
-              className="ai-count-input"
-            />
-          </label>
-        )}
         <button type="button" className="inline-btn" onClick={handleGenerate} disabled={phase === "loading"}>
-          {phase === "loading"
-            ? mode === "parse"
-              ? "Analyse…"
-              : mode === "extract"
-                ? progress && progress.total > 1
-                  ? `Extraction… bloc ${Math.min(progress.done + 1, progress.total)}/${progress.total}`
-                  : "Extraction…"
-                : "Génération…"
-            : mode === "parse"
-              ? "⚡ Analyser le texte"
-              : mode === "extract"
-                ? "🤖 Extraire les questions"
-                : "🤖 Générer"}
+          {phase === "loading" ? "Analyse…" : "⚡ Analyser le texte"}
         </button>
         <button type="button" className="inline-btn" onClick={onClose} disabled={phase === "loading"}>
           Annuler

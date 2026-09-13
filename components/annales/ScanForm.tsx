@@ -4,7 +4,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { useOcr } from "@/lib/useOcr";
 
 interface ScanFormProps {
-  onSave: (name: string, fileName: string | null, fileType: string | null, text: string) => void;
+  onSave: (name: string, fileName: string | null, fileType: string | null, text: string) => Promise<void>;
 }
 
 export default function ScanForm({ onSave }: ScanFormProps) {
@@ -12,6 +12,8 @@ export default function ScanForm({ onSave }: ScanFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -36,10 +38,22 @@ export default function ScanForm({ onSave }: ScanFormProps) {
     if (result !== null) setText(result);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!file || text === null || !name.trim()) return;
-    onSave(name, file.name, file.type, text);
-    resetForm();
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // Attend la confirmation de l'écriture avant de vider le formulaire —
+      // sinon un échec silencieux (IndexedDB bloquée par un autre onglet,
+      // stockage plein...) perd le texte OCR corrigé à la main sans que
+      // l'utilisateur s'en aperçoive.
+      await onSave(name, file.name, file.type, text);
+      resetForm();
+    } catch {
+      setSaveError("Échec de l'enregistrement de l'annale. Le texte ci-dessus n'a pas été perdu — réessaie.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -93,11 +107,16 @@ export default function ScanForm({ onSave }: ScanFormProps) {
             Vérifie et corrige le texte extrait avant d&apos;enregistrer — l&apos;OCR n&apos;est jamais
             parfait.
           </div>
+          {saveError && (
+            <div className="empty-hint" style={{ color: "var(--pulse)" }}>
+              {saveError}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" className="inline-btn" onClick={handleSave} disabled={!name.trim()}>
-              Enregistrer l&apos;annale
+            <button type="button" className="inline-btn" onClick={handleSave} disabled={!name.trim() || saving}>
+              {saving ? "Enregistrement…" : "Enregistrer l'annale"}
             </button>
-            <button type="button" className="inline-btn" onClick={resetForm}>
+            <button type="button" className="inline-btn" onClick={resetForm} disabled={saving}>
               Annuler
             </button>
           </div>

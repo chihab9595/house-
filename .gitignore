@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# electron desktop build
+/dist-electron/
+
 # production
 /build
 
@@ -39,3 +42,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# graphify local build state (machine-specific paths, extraction cache)
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cache/

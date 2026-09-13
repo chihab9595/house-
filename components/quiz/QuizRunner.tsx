@@ -74,6 +74,7 @@ export default function QuizRunner({ moduleId, questions, onExit }: QuizRunnerPr
               key={i}
               type="button"
               className={classes.join(" ")}
+              data-click-sound="none"
               onClick={() => session.toggleAnswer(i)}
               disabled={session.revealed}
             >
@@ -84,20 +85,28 @@ export default function QuizRunner({ moduleId, questions, onExit }: QuizRunnerPr
         })}
       </div>
       <div className="quiz-runner-actions">
-        <button type="button" className="inline-btn" onClick={onExit}>
+        <button
+          type="button"
+          className="inline-btn"
+          onClick={async () => {
+            await session.quit();
+            onExit();
+          }}
+        >
           Quitter
         </button>
         {!session.revealed ? (
           <button
             type="button"
             className="inline-btn"
+            data-click-sound="none"
             onClick={session.confirmAnswer}
             disabled={session.selected.size === 0}
           >
             Valider
           </button>
         ) : (
-          <button type="button" className="inline-btn" onClick={session.next}>
+          <button type="button" className="inline-btn" data-click-sound="none" onClick={session.next}>
             {isLast ? "Voir le résultat" : "Question suivante"}
           </button>
         )}

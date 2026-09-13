@@ -28,9 +28,9 @@ export function useQuestionBank(moduleId: string | null) {
   );
 
   const addQuestion = useCallback(
-    async (prompt: string, choices: string[], correctIndexes: number[]) => {
+    async (prompt: string, choices: string[], correctIndexes: number[], courseName?: string) => {
       if (!moduleId) return;
-      await db.addQuestion(moduleId, prompt, choices, correctIndexes);
+      await db.addQuestion(moduleId, prompt, choices, correctIndexes, courseName);
       await refresh();
     },
     [moduleId, refresh]

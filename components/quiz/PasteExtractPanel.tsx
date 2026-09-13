@@ -7,12 +7,10 @@ interface PasteExtractPanelProps {
   moduleId: string;
 }
 
-type PasteMode = "parse" | "extract";
-
 export default function PasteExtractPanel({ moduleId }: PasteExtractPanelProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [committed, setCommitted] = useState<{ text: string; mode: PasteMode } | null>(null);
+  const [committed, setCommitted] = useState<string | null>(null);
 
   function reset() {
     setOpen(false);
@@ -24,8 +22,7 @@ export default function PasteExtractPanel({ moduleId }: PasteExtractPanelProps) 
     return (
       <GeneratedQuestionsPanel
         moduleId={moduleId}
-        mode={committed.mode}
-        getSourceText={async () => committed.text}
+        getSourceText={async () => committed}
         onClose={reset}
         autoStart
       />
@@ -48,14 +45,8 @@ export default function PasteExtractPanel({ moduleId }: PasteExtractPanelProps) 
   return (
     <div className="ai-generate-panel" style={{ marginBottom: 16 }}>
       <div className="empty-hint" style={{ padding: "0 0 10px" }}>
-        Colle ici le texte copié depuis une page (Word, PDF, cahier de contrôle…). Choisis ensuite comment
-        le traiter :
-        <br />
-        ⚡ <strong>Analyse directe</strong> — instantané et gratuit, marche très bien si le texte est bien
-        structuré (questions numérotées, propositions A/B/C/D…).
-        <br />
-        🤖 <strong>IA</strong> — plus lent, à réserver à un texte moins propre (OCR imprécis, mise en page
-        irrégulière).
+        Colle ici le texte copié depuis une page (Word, PDF, cahier de contrôle…) — questions numérotées,
+        propositions A/B/C/D…
       </div>
       <textarea
         value={text}
@@ -69,17 +60,9 @@ export default function PasteExtractPanel({ moduleId }: PasteExtractPanelProps) 
           type="button"
           className="inline-btn"
           disabled={text.trim().length < 20}
-          onClick={() => setCommitted({ text, mode: "parse" })}
+          onClick={() => setCommitted(text)}
         >
           ⚡ Analyser directement
-        </button>
-        <button
-          type="button"
-          className="inline-btn"
-          disabled={text.trim().length < 20}
-          onClick={() => setCommitted({ text, mode: "extract" })}
-        >
-          🤖 Utiliser l&apos;IA
         </button>
         <button type="button" className="inline-btn" onClick={reset}>
           Annuler

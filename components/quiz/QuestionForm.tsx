@@ -5,11 +5,12 @@ import { useState, type FormEvent } from "react";
 const EMPTY_CHOICES = ["", "", "", ""];
 
 interface QuestionFormProps {
-  onCreate: (prompt: string, choices: string[], correctIndexes: number[]) => void;
+  onCreate: (prompt: string, choices: string[], correctIndexes: number[], courseName?: string) => void;
 }
 
 export default function QuestionForm({ onCreate }: QuestionFormProps) {
   const [prompt, setPrompt] = useState("");
+  const [courseName, setCourseName] = useState("");
   const [choices, setChoices] = useState<string[]>(EMPTY_CHOICES);
   const [correctIndexes, setCorrectIndexes] = useState<number[]>([]);
 
@@ -32,9 +33,11 @@ export default function QuestionForm({ onCreate }: QuestionFormProps) {
     onCreate(
       prompt.trim(),
       choices.map((c) => c.trim()),
-      correctIndexes
+      correctIndexes,
+      courseName.trim() || undefined
     );
     setPrompt("");
+    setCourseName("");
     setChoices(EMPTY_CHOICES);
     setCorrectIndexes([]);
   }
@@ -46,6 +49,12 @@ export default function QuestionForm({ onCreate }: QuestionFormProps) {
         placeholder="Énoncé de la question…"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="Cours (optionnel)…"
+        value={courseName}
+        onChange={(e) => setCourseName(e.target.value)}
       />
 
       <div className="question-choices">
