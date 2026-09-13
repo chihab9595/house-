@@ -8,6 +8,7 @@
 // par l'utilisateur (maquette HTML statique) et portée ici telle quelle.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const CFG = {
   hue: 188, // cyan HOUSE (#4de8ff)
@@ -72,8 +73,20 @@ export default function IntroSequence() {
   const orbRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(true);
+  // La superposition d'intro doit être un enfant direct de <body>, pas de
+  // .shell : .shell passe à opacity:0 pendant le chargement (booting), donc
+  // tout ce qui est imbriqué dedans — canvas compris — serait dessiné mais
+  // invisible. On la sort via un portail, monté seulement après hydratation
+  // (document n'existe pas côté serveur).
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     const core = document.querySelector<HTMLElement>(".pulse-wrap .core");
     const rings = [...document.querySelectorAll<HTMLElement>(".pulse-wrap .ring")].reverse();
     const ekg = document.querySelector<SVGPolylineElement>(".ekg-line");
@@ -622,11 +635,11 @@ export default function IntroSequence() {
     };
     // Ne joue qu'une fois au montage de l'accueil — un changement de thème ou
     // de route démonte ce composant plutôt que de relancer l'intro en place.
-  }, []);
+  }, [mounted]);
 
-  if (!visible) return null;
+  if (!visible || !mounted) return null;
 
-  return (
+  return createPortal(
     <>
       <div id="intro-layer" ref={layerRef}>
         <canvas id="intro-canvas" ref={canvasRef} />
@@ -635,6 +648,7 @@ export default function IntroSequence() {
       <button id="intro-skip" type="button" ref={skipRef}>
         PASSER
       </button>
-    </>
+    </>,
+    document.body
   );
 }
