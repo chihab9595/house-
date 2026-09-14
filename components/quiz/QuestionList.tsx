@@ -1,4 +1,12 @@
+"use client";
+
+import { useState } from "react";
 import type { Question } from "@/lib/quizTypes";
+
+// Sentinelle interne pour le groupe "Sans cours" dans le Set de cours
+// dépliés (une chaîne, pas null, car Set<string> est plus simple à manier
+// que Set<string | null>).
+const NO_COURSE_KEY = "__sans_cours__";
 
 interface QuestionListProps {
   questions: Question[];
@@ -36,20 +44,76 @@ export default function QuestionList({ questions, onRemove, onLaunchCourse, weak
     byCourse.get(key)!.push(q);
   }
 
+  return <GroupedQuestionList order={order} byCourse={byCourse} weakIds={weakIds} onRemove={onRemove} onLaunchCourse={onLaunchCourse} />;
+}
+
+function GroupedQuestionList({
+  order,
+  byCourse,
+  weakIds,
+  onRemove,
+  onLaunchCourse,
+}: {
+  order: (string | null)[];
+  byCourse: Map<string | null, Question[]>;
+  weakIds?: Set<string>;
+  onRemove: (id: string) => void;
+  onLaunchCourse?: (courseName: string | null, weakOnly?: boolean) => void;
+}) {
+  // Repliés par défaut : avec plusieurs cours de dizaines de questions
+  // chacun, tout déplier obligeait à défiler longuement pour trouver le bon
+  // cours. Un clic sur l'en-tête déplie/replie ce cours précis.
+  const [openCourses, setOpenCourses] = useState<Set<string>>(new Set());
+
+  function toggle(key: string) {
+    setOpenCourses((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   return (
     <div className="flex flex-col gap-3.5">
       {order.map((key) => {
         const group = byCourse.get(key)!;
+        const stateKey = key ?? NO_COURSE_KEY;
+        const isOpen = openCourses.has(stateKey);
         const weakCount = weakIds ? group.filter((q) => weakIds.has(q.id)).length : 0;
         return (
-          <div key={key ?? "__sans_cours__"}>
+          <div key={stateKey}>
             <div
+              role="button"
+              tabIndex={0}
               className="panel-title"
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}
+              onClick={() => toggle(stateKey)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggle(stateKey);
+                }
+              }}
+              aria-expanded={isOpen}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 8,
+                width: "100%",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
             >
-              <span>{key ?? "Sans cours"}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ display: "inline-block", transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                  ▶
+                </span>
+                {key ?? "Sans cours"} ({group.length})
+              </span>
               {onLaunchCourse && (
-                <span style={{ display: "flex", gap: 8 }}>
+                <span style={{ display: "flex", gap: 8 }} onClick={(e) => e.stopPropagation()}>
                   {weakCount > 0 && (
                     <button
                       type="button"
@@ -65,7 +129,7 @@ export default function QuestionList({ questions, onRemove, onLaunchCourse, weak
                 </span>
               )}
             </div>
-            <FlatQuestionList questions={group} onRemove={onRemove} />
+            {isOpen && <FlatQuestionList questions={group} onRemove={onRemove} />}
           </div>
         );
       })}
