@@ -98,10 +98,12 @@ export default function IntroSequence() {
       ekg?.classList.add("on");
     }
 
-    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Jouée systématiquement, même si le système demande de réduire les
+    // animations : c'est la première image de marque de l'app, pas une
+    // simple transition d'UI.
     const seen = PLAY_ONCE_PER_SESSION && sessionStorage.getItem("house-intro") === "1";
 
-    if (reduced || seen) {
+    if (seen) {
       wake();
       setVisible(false);
       return;
